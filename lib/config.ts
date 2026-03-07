@@ -1,7 +1,7 @@
+import { getAllSettings, initDefaultSettings } from "@/lib/db/queries/settings";
+
 export interface AppConfig {
   googleMapsApiKey: string;
-  openRouterApiKey: string;
-  openRouterDefaultModel: string;
   smtp: {
     host: string;
     port: number;
@@ -17,62 +17,55 @@ export interface AppConfig {
   };
 }
 
-let cachedConfig: AppConfig | null = null;
-
-export function getConfig(): AppConfig {
-  if (cachedConfig) {
-    return cachedConfig;
+function parsePort(value: string, fallback: number, label: string): number {
+  if (!value) {
+    return fallback;
   }
 
-  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-  const imapPort = parseInt(process.env.IMAP_PORT || '993', 10);
-
-  if (isNaN(smtpPort)) {
-    throw new Error(`Invalid SMTP_PORT: ${process.env.SMTP_PORT}`);
-  }
-  if (isNaN(imapPort)) {
-    throw new Error(`Invalid IMAP_PORT: ${process.env.IMAP_PORT}`);
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Invalid ${label}: ${value}`);
   }
 
-  cachedConfig = {
-    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
-    openRouterApiKey: process.env.OPENROUTER_API_KEY || '',
-    openRouterDefaultModel:
-      process.env.OPENROUTER_DEFAULT_MODEL || 'anthropic/claude-3-5-sonnet',
-    smtp: {
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: smtpPort,
-      user: process.env.SMTP_USER || '',
-      pass: process.env.SMTP_PASS || '',
-      fromName: process.env.SMTP_FROM_NAME || '',
-    },
-    imap: {
-      host: process.env.IMAP_HOST || 'imap.gmail.com',
-      port: imapPort,
-      user: process.env.IMAP_USER || '',
-      pass: process.env.IMAP_PASS || '',
-    },
-  };
-
-  return cachedConfig;
+  return parsed;
 }
 
-/**
- * Validate that required config values are present for a given operation.
- * Throws with a list of missing keys.
- */
+export function getConfig(): AppConfig {
+  initDefaultSettings();
+  const settings = getAllSettings();
+
+  return {
+    googleMapsApiKey: settings.google_maps_api_key || "",
+    smtp: {
+      host: settings.smtp_host || "smtp.gmail.com",
+      port: parsePort(settings.smtp_port || "587", 587, "smtp_port"),
+      user: settings.smtp_user || "",
+      pass: settings.smtp_pass || "",
+      fromName: settings.smtp_from_name || "",
+    },
+    imap: {
+      host: settings.imap_host || "imap.gmail.com",
+      port: parsePort(settings.imap_port || "993", 993, "imap_port"),
+      user: settings.imap_user || "",
+      pass: settings.imap_pass || "",
+    },
+  };
+}
+
 export function requireConfig(...keys: (keyof AppConfig)[]): AppConfig {
   const config = getConfig();
   const missing: string[] = [];
 
   for (const key of keys) {
     const value = config[key];
-    if (typeof value === 'string' && value === '') {
+    if (typeof value === "string" && value === "") {
       missing.push(key);
-    } else if (typeof value === 'object') {
-      // Check nested object for empty strings
+      continue;
+    }
+
+    if (typeof value === "object" && value !== null) {
       for (const [subKey, subValue] of Object.entries(value)) {
-        if (typeof subValue === 'string' && subValue === '') {
+        if (typeof subValue === "string" && subValue === "") {
           missing.push(`${key}.${subKey}`);
         }
       }
@@ -81,17 +74,13 @@ export function requireConfig(...keys: (keyof AppConfig)[]): AppConfig {
 
   if (missing.length > 0) {
     throw new Error(
-      `Missing required configuration: ${missing.join(', ')}. ` +
-        `Set the corresponding environment variables.`
+      `Missing required configuration: ${missing.join(", ")}. Update the corresponding SQLite-backed settings before retrying.`
     );
   }
 
   return config;
 }
 
-/**
- * Reset cached config. Useful for testing.
- */
 export function resetConfigCache(): void {
-  cachedConfig = null;
+  // Config is read directly from SQLite on each access.
 }

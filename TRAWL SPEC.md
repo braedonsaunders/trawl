@@ -52,7 +52,7 @@ Trawl automates the full sales development cycle for B2B service businesses:
 | Backend | Next.js API Routes + Server Actions | |
 | Database | SQLite via `better-sqlite3` | Synchronous, embedded, zero setup |
 | Browser Automation | Playwright (Chromium) | Website scraping + screenshot capture |
-| LLM | OpenRouter API | Model-agnostic — swap Claude / GPT / Gemini via config |
+| LLM | Vercel AI SDK + provider adapters | Model-agnostic runtime selection across OpenAI and Anthropic |
 | Email Send | Nodemailer (SMTP) | Gmail App Password or custom SMTP |
 | Email Receive | IMAP via `imapflow` | Reply polling + threading |
 | Search / Discovery | Google Maps Places API (New) | Text Search + Place Details |
@@ -128,7 +128,7 @@ trawl/
 │   │   ├── crawler.ts                # Multi-page site crawler
 │   │   └── screenshot.ts             # Full-page screenshot capture
 │   ├── llm/
-│   │   ├── client.ts                 # OpenRouter fetch wrapper
+│   │   ├── client.ts                 # Vercel AI SDK wrapper + provider routing
 │   │   ├── prompts/
 │   │   │   ├── enrich.ts             # Enrichment extraction prompt
 │   │   │   ├── score.ts              # Fit scoring prompt
@@ -140,7 +140,7 @@ trawl/
 │   ├── email/
 │   │   ├── smtp.ts                   # Nodemailer send wrapper
 │   │   └── imap.ts                   # imapflow reply polling
-│   └── config.ts                     # Load + validate env/settings
+│   └── config.ts                     # Load + validate SQLite-backed settings
 ├── components/
 │   ├── leads/
 │   │   ├── LeadsTable.tsx
@@ -153,7 +153,6 @@ trawl/
 │   │   └── PipelineFunnel.tsx
 │   └── ui/                           # shadcn/ui re-exports
 ├── trawl.db                          # SQLite database (gitignored)
-├── .env.local                        # API keys + SMTP config (gitignored)
 └── README.md
 ```
 
@@ -317,7 +316,7 @@ CREATE TABLE search_jobs (
 
 ### 4.8 `settings`
 
-Key-value store for runtime config (supplements `.env.local` for UI-editable settings).
+Key-value store for runtime config and app-managed secrets.
 
 ```sql
 CREATE TABLE settings (
@@ -560,10 +559,10 @@ Tabs:
 Sections:
 
 - **Company Profile** — website URL, profile run button, editable extracted fields
-- **API Keys** — Google Maps, OpenRouter (stored in `.env.local`, not DB)
-- **SMTP / IMAP** — host, port, user, password, test connection button
+- **Provider Auth** — OpenAI + Anthropic API keys or OAuth, plus dynamic model loading
+- **SMTP / IMAP** — host, port, user, password
 - **Outreach Config** — daily send cap, send delay seconds, score thresholds
-- **LLM Config** — default model string (OpenRouter), enrichment/scoring/email models (can differ)
+- **LLM Config** — selected provider + selected model
 - **Handoff Contacts** — add/edit/delete named contacts
 - **Handoff Rules** — industry-to-tag routing rules
 
@@ -571,34 +570,13 @@ Sections:
 
 ## 7. Configuration & Settings
 
-### 7.1 `.env.local`
-
-```bash
-# Google Maps
-GOOGLE_MAPS_API_KEY=
-
-# LLM via OpenRouter
-OPENROUTER_API_KEY=
-OPENROUTER_DEFAULT_MODEL=anthropic/claude-3-5-sonnet
-
-# SMTP (outgoing email)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=you@yourcompany.com
-SMTP_PASS=                        # Gmail App Password recommended
-SMTP_FROM_NAME=Your Name
-
-# IMAP (reply polling)
-IMAP_HOST=imap.gmail.com
-IMAP_PORT=993
-IMAP_USER=you@yourcompany.com
-IMAP_PASS=
-```
-
-### 7.2 Runtime Settings (in `settings` table, editable via UI)
+### 7.1 Runtime Settings (in SQLite, editable via UI)
 
 | Key | Default | Description |
 |---|---|---|
+| `google_maps_api_key` | `""` | Google Maps Places API key |
+| `llm_provider` | `openai` | Selected LLM provider |
+| `llm_model` | `""` | Selected provider model |
 | `daily_send_cap` | `50` | Max emails sent per calendar day |
 | `send_delay_seconds` | `45` | Minimum delay between outbound sends |
 | `enrichment_concurrency` | `2` | Parallel Playwright instances |
@@ -607,6 +585,15 @@ IMAP_PASS=
 | `warm_score_threshold` | `40` | Minimum score for Warm tier |
 | `max_crawl_pages` | `8` | Max pages per domain in Playwright crawl |
 | `screenshots_dir` | `./data/screenshots` | Local path for screenshot storage |
+| `smtp_*` / `imap_*` | provider defaults | Mail credentials and connection settings |
+| `sender_name` / `sender_title` | app defaults | Email sender identity |
+| `handoff_contacts` / `handoff_rules` | `[]` | JSON-encoded routing settings |
+
+### 7.2 Provider Credentials (in `provider_settings`)
+
+- OpenAI and Anthropic support `api_key` and `oauth` auth modes
+- OAuth client configuration, access tokens, refresh tokens, and selected base URLs are stored in SQLite
+- Available models are fetched live from the selected provider API
 
 ---
 
@@ -618,7 +605,7 @@ IMAP_PASS=
 |---|---|---|
 | Scaffold | Next.js 15 + pnpm + Tailwind + shadcn/ui, basic layout + sidebar | |
 | Database | `better-sqlite3` client, migration runner, all schema migrations | Run on app startup |
-| Settings screen | `.env.local` display, runtime settings CRUD, SMTP test | |
+| Settings screen | SQLite-backed settings CRUD, provider auth, live model loading | |
 | Discovery | Google Maps search, lead upsert, `search_jobs` log, basic leads table | Core value delivery |
 
 ### Phase 2 — Intelligence
@@ -699,7 +686,7 @@ All costs per-lead, approximate. Trawl runs at minimal cost — locally hosted, 
 | Item | Approx. Cost |
 |---|---|
 | Google Maps Place Details | ~$0.017 per lead |
-| LLM Enrichment (Claude 3.5 Sonnet via OpenRouter) | ~$0.003–0.008 per lead |
+| LLM Enrichment (provider/model selected in settings) | ~$0.003–0.008 per lead |
 | LLM Scoring | ~$0.002–0.004 per lead |
 | LLM Email Generation | ~$0.002–0.004 per email |
 | LLM Handoff Email | ~$0.002 per reply |

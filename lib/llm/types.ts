@@ -1,3 +1,6 @@
+import type { ProviderId } from "@/lib/db/queries/provider-settings";
+import type { z } from "zod";
+
 export interface EnrichmentResult {
   website_summary: string;
   industry: string;
@@ -11,7 +14,7 @@ export interface EnrichmentResult {
 
 export interface ScoringResult {
   fit_score: number;
-  fit_tier: 'hot' | 'warm' | 'cold';
+  fit_tier: "hot" | "warm" | "cold";
   reasoning: string;
   strengths: string[];
   risks: string[];
@@ -30,9 +33,11 @@ export interface HandoffResult {
   body_text: string;
 }
 
-export interface LLMCallOptions {
+export interface LLMCallOptions<T> {
   systemPrompt: string;
   userPrompt: string;
+  schema: z.ZodType<T>;
+  provider?: ProviderId;
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -41,6 +46,7 @@ export interface LLMCallOptions {
 export interface LLMCallResult<T = unknown> {
   parsed: T;
   model: string;
+  provider: ProviderId;
 }
 
 export interface PromptPair {

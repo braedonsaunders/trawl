@@ -125,7 +125,7 @@ export async function searchPlaces(
   const config = getConfig();
 
   if (!config.googleMapsApiKey) {
-    throw new Error('GOOGLE_MAPS_API_KEY is not configured');
+    throw new Error("Google Maps API key is not configured in settings");
   }
 
   const results: PlaceLead[] = [];
@@ -190,7 +190,7 @@ export async function getPlaceDetails(
   const config = getConfig();
 
   if (!config.googleMapsApiKey) {
-    throw new Error('GOOGLE_MAPS_API_KEY is not configured');
+    throw new Error("Google Maps API key is not configured in settings");
   }
 
   const response = await fetch(`${PLACES_API_BASE}/${placeId}`, {

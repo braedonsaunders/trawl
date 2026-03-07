@@ -5,9 +5,9 @@ import { getScore } from "@/lib/db/queries/scores";
 import { getCompanyProfile } from "@/lib/db/queries/companies";
 import { createEmailDraft } from "@/lib/db/queries/emails";
 import { callLLM } from "@/lib/llm/client";
+import { emailResultSchema } from "@/lib/llm/schemas";
 import { buildEmailPrompt } from "@/lib/llm/prompts/email";
 import { getSetting } from "@/lib/db/queries/settings";
-import type { EmailResult } from "@/lib/llm/types";
 
 export async function POST(
   request: NextRequest,
@@ -57,8 +57,9 @@ export async function POST(
       senderTitle
     );
 
-    const { parsed: emailData, model } = await callLLM<EmailResult>({
+    const { parsed: emailData, model } = await callLLM({
       ...prompt,
+      schema: emailResultSchema,
       temperature: 0.7,
       maxTokens: 1200,
     });

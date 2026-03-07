@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { crawlWebsite } from "@/lib/playwright/crawler";
 import { callLLM } from "@/lib/llm/client";
+import { enrichmentResultSchema } from "@/lib/llm/schemas";
 import { buildEnrichmentPrompt } from "@/lib/llm/prompts/enrich";
 import { upsertCompanyProfile } from "@/lib/db/queries/companies";
-import type { EnrichmentResult } from "@/lib/llm/types";
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,8 +25,9 @@ export async function POST(request: NextRequest) {
       crawlResult.allContent
     );
 
-    const { parsed: profileData, model } = await callLLM<EnrichmentResult>({
+    const { parsed: profileData, model } = await callLLM({
       ...prompt,
+      schema: enrichmentResultSchema,
       temperature: 0.3,
       maxTokens: 1000,
     });

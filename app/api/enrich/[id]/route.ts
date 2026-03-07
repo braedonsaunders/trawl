@@ -3,8 +3,8 @@ import { getLeadById, updateLeadStatus } from "@/lib/db/queries/leads";
 import { upsertEnrichment } from "@/lib/db/queries/enrichments";
 import { crawlWebsite } from "@/lib/playwright/crawler";
 import { callLLM } from "@/lib/llm/client";
+import { enrichmentResultSchema } from "@/lib/llm/schemas";
 import { buildEnrichmentPrompt } from "@/lib/llm/prompts/enrich";
-import type { EnrichmentResult } from "@/lib/llm/types";
 
 export async function POST(
   request: NextRequest,
@@ -45,8 +45,9 @@ export async function POST(
       rawContent
     );
 
-    const { parsed: enrichmentData, model } = await callLLM<EnrichmentResult>({
+    const { parsed: enrichmentData, model } = await callLLM({
       ...prompt,
+      schema: enrichmentResultSchema,
       temperature: 0.3,
       maxTokens: 1000,
     });

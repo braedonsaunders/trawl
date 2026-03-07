@@ -5,8 +5,8 @@ import { getCompanyProfile } from "@/lib/db/queries/companies";
 import { upsertScore } from "@/lib/db/queries/scores";
 import { getSetting } from "@/lib/db/queries/settings";
 import { callLLM } from "@/lib/llm/client";
+import { scoringResultSchema } from "@/lib/llm/schemas";
 import { buildScoringPrompt } from "@/lib/llm/prompts/score";
-import type { ScoringResult } from "@/lib/llm/types";
 
 export async function POST() {
   try {
@@ -47,8 +47,9 @@ export async function POST() {
           enrichment as unknown as Record<string, unknown>
         );
 
-        const { parsed: scoreData, model } = await callLLM<ScoringResult>({
+        const { parsed: scoreData, model } = await callLLM({
           ...prompt,
+          schema: scoringResultSchema,
           temperature: 0.2,
           maxTokens: 800,
         });

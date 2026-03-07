@@ -8,6 +8,7 @@ import { pollForReplies } from "@/lib/email/imap";
 import { sendEmail } from "@/lib/email/smtp";
 import { callLLM } from "@/lib/llm/client";
 import { buildHandoffPrompt } from "@/lib/llm/prompts/handoff";
+import { handoffResultSchema } from "@/lib/llm/schemas";
 import { getCompanyProfile } from "@/lib/db/queries/companies";
 import type { HandoffResult } from "@/lib/llm/types";
 
@@ -96,6 +97,7 @@ export async function POST() {
 
         const { parsed: bridgeData } = await callLLM<HandoffResult>({
           ...prompt,
+          schema: handoffResultSchema,
           temperature: 0.5,
           maxTokens: 600,
         });

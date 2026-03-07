@@ -1,109 +1,203 @@
-import { getConfig } from '@/lib/config';
-import type { LLMCallOptions, LLMCallResult } from '@/lib/llm/types';
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
+import { generateText, Output } from "ai";
+import {
+  getProviderSetting,
+  type ProviderId,
+  type ProviderSettingRecord,
+} from "@/lib/db/queries/provider-settings";
+import { getSetting } from "@/lib/db/queries/settings";
+import {
+  ANTHROPIC_OAUTH_BETA_HEADER,
+  refreshOAuthAccessToken,
+} from "@/lib/provider-auth";
+import type { LLMCallOptions, LLMCallResult } from "@/lib/llm/types";
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+export interface ProviderModelOption {
+  id: string;
+  label: string;
+  createdAt: string | null;
+}
 
-/**
- * Strip markdown code fences from LLM output before parsing JSON.
- * Handles ```json ... ``` and ``` ... ``` patterns.
- */
-function stripCodeFences(text: string): string {
-  let cleaned = text.trim();
+function withoutTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
 
-  // Remove leading ```json or ```
-  if (cleaned.startsWith('```')) {
-    const firstNewline = cleaned.indexOf('\n');
-    if (firstNewline !== -1) {
-      cleaned = cleaned.slice(firstNewline + 1);
+function normalizeProviderId(value: string | undefined): ProviderId {
+  return value === "anthropic" ? "anthropic" : "openai";
+}
+
+function buildProviderError(provider: ProviderId, authMode: string): string {
+  if (authMode === "oauth") {
+    return `${provider} OAuth is selected but no access token is stored. Connect the provider in Settings and retry.`;
+  }
+
+  return `${provider} API key is not configured. Update the provider in Settings and retry.`;
+}
+
+async function getProviderConfigForUse(
+  provider: ProviderId
+): Promise<ProviderSettingRecord> {
+  const config = getProviderSetting(provider);
+
+  if (
+    config.auth_mode === "oauth" &&
+    config.oauth_expires_at &&
+    config.oauth_refresh_token
+  ) {
+    const expiresAt = Date.parse(config.oauth_expires_at);
+    if (Number.isFinite(expiresAt) && expiresAt - Date.now() < 60_000) {
+      return refreshOAuthAccessToken(provider);
     }
   }
 
-  // Remove trailing ```
-  if (cleaned.endsWith('```')) {
-    cleaned = cleaned.slice(0, -3);
-  }
-
-  return cleaned.trim();
+  return config;
 }
 
-/**
- * Parse JSON from LLM output, gracefully handling markdown code fences.
- */
-function parseJSONResponse<T>(content: string): T {
-  const cleaned = stripCodeFences(content);
+function getProviderToken(config: ProviderSettingRecord): string {
+  if (config.auth_mode === "oauth") {
+    if (!config.oauth_access_token) {
+      throw new Error(buildProviderError(config.provider, config.auth_mode));
+    }
 
-  try {
-    return JSON.parse(cleaned) as T;
-  } catch {
+    return config.oauth_access_token;
+  }
+
+  if (!config.api_key) {
+    throw new Error(buildProviderError(config.provider, config.auth_mode));
+  }
+
+  return config.api_key;
+}
+
+function buildOpenAIProvider(config: ProviderSettingRecord) {
+  return createOpenAI({
+    baseURL: config.base_url,
+    apiKey: getProviderToken(config),
+    organization: config.organization || undefined,
+    project: config.project || undefined,
+  });
+}
+
+function buildAnthropicProvider(config: ProviderSettingRecord) {
+  const oauthHeaders =
+    config.auth_mode === "oauth"
+      ? { "anthropic-beta": ANTHROPIC_OAUTH_BETA_HEADER }
+      : undefined;
+
+  return createAnthropic({
+    baseURL: config.base_url,
+    apiKey: config.auth_mode === "api_key" ? getProviderToken(config) : undefined,
+    authToken:
+      config.auth_mode === "oauth" ? getProviderToken(config) : undefined,
+    headers: oauthHeaders,
+  });
+}
+
+async function resolveLlmSelection(
+  explicitProvider?: ProviderId,
+  explicitModel?: string
+): Promise<{ provider: ProviderId; model: string; config: ProviderSettingRecord }> {
+  const provider = explicitProvider ?? normalizeProviderId(getSetting("llm_provider") || undefined);
+  const model = explicitModel || (getSetting("llm_model") || "").trim();
+
+  if (!model) {
     throw new Error(
-      `Failed to parse LLM response as JSON. ` +
-        `Content (first 500 chars): ${cleaned.slice(0, 500)}`
+      `No model is selected for ${provider}. Choose a model in Settings and retry.`
     );
   }
+
+  const config = await getProviderConfigForUse(provider);
+
+  return { provider, model, config };
 }
 
-/**
- * Call an LLM via the OpenRouter API.
- * Returns the parsed JSON object and the model that was used.
- */
-export async function callLLM<T = unknown>(
-  options: LLMCallOptions
+export async function callLLM<T>(
+  options: LLMCallOptions<T>
 ): Promise<LLMCallResult<T>> {
-  const config = getConfig();
+  const selection = await resolveLlmSelection(options.provider, options.model);
+  const provider =
+    selection.provider === "anthropic"
+      ? buildAnthropicProvider(selection.config)
+      : buildOpenAIProvider(selection.config);
 
-  if (!config.openRouterApiKey) {
-    throw new Error('OPENROUTER_API_KEY is not configured');
+  const result = await generateText({
+    model: provider(selection.model),
+    system: options.systemPrompt,
+    prompt: options.userPrompt,
+    output: Output.object({ schema: options.schema }),
+    temperature: options.temperature ?? 0.3,
+    maxOutputTokens: options.maxTokens ?? 1000,
+  });
+
+  return {
+    parsed: result.output,
+    model: result.response.modelId || selection.model,
+    provider: selection.provider,
+  };
+}
+
+export async function listProviderModels(
+  provider: ProviderId
+): Promise<ProviderModelOption[]> {
+  const config = await getProviderConfigForUse(provider);
+  const token = getProviderToken(config);
+  const baseUrl = withoutTrailingSlash(config.base_url);
+  const headers = new Headers();
+
+  if (provider === "anthropic") {
+    headers.set("anthropic-version", "2023-06-01");
+
+    if (config.auth_mode === "oauth") {
+      headers.set("Authorization", `Bearer ${token}`);
+      headers.set("anthropic-beta", ANTHROPIC_OAUTH_BETA_HEADER);
+    } else {
+      headers.set("x-api-key", token);
+    }
+  } else {
+    headers.set("Authorization", `Bearer ${token}`);
+
+    if (config.organization) {
+      headers.set("OpenAI-Organization", config.organization);
+    }
+
+    if (config.project) {
+      headers.set("OpenAI-Project", config.project);
+    }
   }
 
-  const model = options.model || config.openRouterDefaultModel;
-
-  const requestBody = {
-    model,
-    messages: [
-      { role: 'system' as const, content: options.systemPrompt },
-      { role: 'user' as const, content: options.userPrompt },
-    ],
-    temperature: options.temperature ?? 0.3,
-    max_tokens: options.maxTokens ?? 1000,
-    response_format: { type: 'json_object' as const },
-  };
-
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.openRouterApiKey}`,
-      'HTTP-Referer': 'https://trawl.app',
-      'X-Title': 'Trawl',
-    },
-    body: JSON.stringify(requestBody),
+  const response = await fetch(`${baseUrl}/models`, {
+    method: "GET",
+    headers,
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
+    const body = await response.text();
     throw new Error(
-      `OpenRouter API request failed (${response.status}): ${errorBody}`
+      `Failed to fetch ${provider} models (${response.status}): ${body}`
     );
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    data?: Array<{
+      id?: string;
+      display_name?: string;
+      created_at?: string;
+      created?: number;
+    }>;
+  };
 
-  if (data.error) {
-    throw new Error(
-      `OpenRouter API error: ${data.error.message || JSON.stringify(data.error)}`
-    );
-  }
+  const models = Array.isArray(data.data) ? data.data : [];
 
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error(
-      'OpenRouter API returned empty response. ' +
-        `Full response: ${JSON.stringify(data).slice(0, 500)}`
-    );
-  }
-
-  const modelUsed = data.model || model;
-  const parsed = parseJSONResponse<T>(content);
-
-  return { parsed, model: modelUsed };
+  return models
+    .map((model) => ({
+      id: model.id || "",
+      label: model.display_name || model.id || "",
+      createdAt:
+        typeof model.created === "number"
+          ? new Date(model.created * 1000).toISOString()
+          : model.created_at || null,
+    }))
+    .filter((model) => Boolean(model.id))
+    .sort((a, b) => a.label.localeCompare(b.label));
 }

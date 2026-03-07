@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAllSettings, setSetting, initDefaultSettings } from "@/lib/db/queries/settings";
+import type { SettingsPayload } from "@/lib/settings";
+import { getSettingsPayload, saveSettingsPayload } from "@/lib/settings";
 
 export async function GET() {
   try {
-    initDefaultSettings();
-    const settings = getAllSettings();
-
-    return NextResponse.json({ settings });
+    return NextResponse.json(getSettingsPayload());
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
@@ -20,39 +18,17 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body: Record<string, string> = await request.json();
+    const body = (await request.json()) as SettingsPayload;
 
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json(
-        { error: "Body must be a JSON object of key-value pairs" },
+        { error: "Body must be a JSON object" },
         { status: 400 }
       );
     }
 
-    const entries = Object.entries(body);
-    if (entries.length === 0) {
-      return NextResponse.json(
-        { error: "No settings provided" },
-        { status: 400 }
-      );
-    }
-
-    for (const [key, value] of entries) {
-      if (typeof key !== "string" || typeof value !== "string") {
-        return NextResponse.json(
-          { error: `Invalid setting: key and value must be strings` },
-          { status: 400 }
-        );
-      }
-      setSetting(key, value);
-    }
-
-    const settings = getAllSettings();
-
-    return NextResponse.json({
-      updated: entries.length,
-      settings,
-    });
+    const settings = saveSettingsPayload(body);
+    return NextResponse.json(settings);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";

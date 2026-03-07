@@ -17,7 +17,7 @@ function createImapClient(): ImapFlow {
 
   if (!config.imap.user || !config.imap.pass) {
     throw new Error(
-      'IMAP credentials not configured. Set IMAP_USER and IMAP_PASS environment variables.'
+      "IMAP credentials are not configured. Update the SQLite-backed IMAP settings and retry."
     );
   }
 

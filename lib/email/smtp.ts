@@ -26,7 +26,7 @@ function createTransporter(): nodemailer.Transporter<SMTPTransport.SentMessageIn
 
   if (!config.smtp.user || !config.smtp.pass) {
     throw new Error(
-      'SMTP credentials not configured. Set SMTP_USER and SMTP_PASS environment variables.'
+      "SMTP credentials are not configured. Update the SQLite-backed SMTP settings and retry."
     );
   }
 
