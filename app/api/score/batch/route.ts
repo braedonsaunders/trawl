@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
+import { startAgentRun, type AgentRunTracker } from "@/lib/agent/monitor";
 import { getLeadsByStatus, updateLeadStatus } from "@/lib/db/queries/leads";
 import { getEnrichment } from "@/lib/db/queries/enrichments";
 import { getCompanyProfile } from "@/lib/db/queries/companies";
-import { upsertScore } from "@/lib/db/queries/scores";
-import { getSetting } from "@/lib/db/queries/settings";
-import { callLLM } from "@/lib/llm/client";
-import { scoringResultSchema } from "@/lib/llm/schemas";
-import { buildScoringPrompt } from "@/lib/llm/prompts/score";
+import { resolveLeadStatusAfterAnalysis, scoreLead } from "@/lib/leads/pipeline";
 
 export async function POST() {
+  let runTracker: AgentRunTracker | null = null;
+
   try {
     const company = getCompanyProfile();
 
@@ -21,9 +20,18 @@ export async function POST() {
 
     const leads = getLeadsByStatus("enriched");
     leads.sort((a, b) => (b.google_rating || 0) - (a.google_rating || 0));
-
-    const hotThreshold = parseInt(getSetting("hot_score_threshold") || "70", 10);
-    const warmThreshold = parseInt(getSetting("warm_score_threshold") || "40", 10);
+    runTracker = startAgentRun({
+      kind: "score_batch",
+      title: "Batch score enriched leads",
+      summary: `Queued ${leads.length} enriched leads`,
+      metadata: {
+        total: leads.length,
+      },
+    });
+    runTracker.info("Loaded leads for batch scoring", {
+      stage: "setup",
+      detail: `${leads.length} enriched leads`,
+    });
 
     let processed = 0;
     let failed = 0;
@@ -31,61 +39,55 @@ export async function POST() {
 
     for (const lead of leads) {
       try {
+        runTracker.setSummary(`Scoring ${processed + failed + 1} of ${total}`);
         const enrichment = getEnrichment(lead.id);
         if (!enrichment) {
           failed++;
+          runTracker.warning(`Skipped ${lead.name}`, {
+            stage: "lead",
+            detail: "No enrichment payload found",
+          });
           continue;
         }
 
-        const prompt = buildScoringPrompt(
-          {
-            name: company.name,
-            industry: company.industries_served ? JSON.parse(company.industries_served)[0] || "" : "",
-            services: company.services ? JSON.parse(company.services) : [],
-            description: company.description || "",
-          },
-          enrichment as unknown as Record<string, unknown>
+        runTracker.progress(`Scoring ${lead.name}`, {
+          stage: "lead",
+          detail: enrichment.model_used || "Saved enrichment",
+        });
+        await scoreLead(lead.id, enrichment, company, runTracker);
+        updateLeadStatus(
+          lead.id,
+          resolveLeadStatusAfterAnalysis(lead.status, "scored")
         );
-
-        const { parsed: scoreData, model } = await callLLM({
-          ...prompt,
-          schema: scoringResultSchema,
-          temperature: 0.2,
-          maxTokens: 800,
-        });
-
-        let fitTier: "hot" | "warm" | "cold";
-        if (scoreData.fit_score >= hotThreshold) {
-          fitTier = "hot";
-        } else if (scoreData.fit_score >= warmThreshold) {
-          fitTier = "warm";
-        } else {
-          fitTier = "cold";
-        }
-
-        upsertScore(lead.id, {
-          fit_score: scoreData.fit_score,
-          fit_tier: fitTier,
-          reasoning: scoreData.reasoning,
-          strengths: JSON.stringify(scoreData.strengths || []),
-          risks: JSON.stringify(scoreData.risks || []),
-          recommended_angle: scoreData.recommended_angle,
-          scored_at: new Date().toISOString(),
-          model_used: model,
-        });
-
-        updateLeadStatus(lead.id, "scored");
         processed++;
+        runTracker.success(`Finished ${lead.name}`, {
+          stage: "lead",
+          detail: "Score saved",
+        });
       } catch (err) {
         console.error(`[Batch Score] Failed for lead ${lead.id}:`, err);
         failed++;
+        runTracker.error(`Failed ${lead.name}`, {
+          stage: "lead",
+          detail: err instanceof Error ? err.message : "Unknown error occurred",
+        });
       }
     }
 
-    return NextResponse.json({ processed, failed, total });
+    runTracker.complete(
+      `Batch scoring finished: ${processed}/${total} processed, ${failed} failed`
+    );
+
+    return NextResponse.json({
+      runId: runTracker.runId,
+      processed,
+      failed,
+      total,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
+    runTracker?.fail(error, `Batch scoring failed: ${message}`);
     console.error("[POST /api/score/batch]", error);
     return NextResponse.json(
       { error: "Batch scoring failed", detail: message },

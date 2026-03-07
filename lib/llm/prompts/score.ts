@@ -26,8 +26,8 @@ SUPPLIER PROFILE:
 Score the lead from 0 to 100 based on:
 - Industry alignment and relevance
 - Likelihood they need the supplier's services
-- Company size and potential deal value
-- Accessibility of decision makers
+- Company size, employee count, and potential deal value
+- Accessibility of decision makers or specific contact paths
 - Overall strategic fit
 
 Respond ONLY with a valid JSON object matching this exact schema:

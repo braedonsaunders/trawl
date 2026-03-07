@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   BarChart3,
   Search,
   Users,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: BarChart3 },
+  { label: "Live Runs", href: "/runs", icon: Activity },
   { label: "Discover", href: "/discover", icon: Search },
   { label: "Leads", href: "/leads", icon: Users },
   { label: "Outreach", href: "/outreach", icon: Mail },

@@ -2,17 +2,23 @@
   "name": "trawl",
   "version": "1.0.0",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "desktop:sync-node-native": "node scripts/desktop/ensure-node-native-deps.mjs",
+    "desktop:dev": "node scripts/desktop/dev.mjs",
+    "desktop:install-playwright": "node scripts/desktop/install-playwright.mjs",
+    "desktop:prepare-node-runtime": "node scripts/desktop/prepare-node-runtime.mjs",
+    "desktop:pack": "node scripts/desktop/dist.mjs --dir",
+    "desktop:dist": "node scripts/desktop/dist.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/openai": "^3.0.41",
     "ai": "^6.0.116",
-    "better-sqlite3": "^11.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "imapflow": "^1.0.0",
@@ -28,12 +34,13 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.0",
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
     "@types/nodemailer": "^6.4.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.0",
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.0",
     "postcss": "^8.4.0",
@@ -41,9 +48,53 @@
     "typescript": "^5.7.0"
   },
   "packageManager": "pnpm@10.29.3",
+  "build": {
+    "appId": "com.trawl.desktop",
+    "productName": "Trawl",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      ".next/**/*",
+      "lib/db/migrations/**/*",
+      "next.config.mjs",
+      "package.json",
+      "public/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".playwright-browsers",
+        "to": ".playwright-browsers",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": ".desktop-node",
+        "to": "node-runtime",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
+      "electron",
+      "electron-winstaller",
       "sharp",
       "unrs-resolver"
     ]

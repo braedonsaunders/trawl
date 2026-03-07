@@ -36,8 +36,7 @@ next-env.d.ts
 
 # database
 trawl.db
-trawl.db-journal
-trawl.db-wal
+trawl.db-*
 
 # screenshots
 /data/screenshots/
@@ -46,3 +45,9 @@ trawl.db-wal
 /playwright-report/
 /blob-report/
 /test-results/
+/.playwright-cli/
+
+# electron
+/.playwright-browsers/
+/.desktop-node/
+/dist-electron*/

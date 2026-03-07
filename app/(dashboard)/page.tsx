@@ -173,7 +173,7 @@ export default function DashboardPage() {
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            Enrich Pending
+            Enrich + Score Pending
           </button>
 
           <button
@@ -188,7 +188,7 @@ export default function DashboardPage() {
             ) : (
               <Target className="h-4 w-4" />
             )}
-            Score Pending
+            Re-score Enriched
           </button>
 
           <Link

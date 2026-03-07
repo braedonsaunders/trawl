@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { crawlWebsite } from "@/lib/playwright/crawler";
 import { callLLM } from "@/lib/llm/client";
-import { enrichmentResultSchema } from "@/lib/llm/schemas";
-import { buildEnrichmentPrompt } from "@/lib/llm/prompts/enrich";
+import { companyProfileResultSchema } from "@/lib/llm/schemas";
+import { buildCompanyProfilePrompt } from "@/lib/llm/prompts/profile";
 import { upsertCompanyProfile } from "@/lib/db/queries/companies";
+import { getSetting } from "@/lib/db/queries/settings";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,28 +18,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const crawlResult = await crawlWebsite(website, 8);
-
-    const prompt = buildEnrichmentPrompt(
-      "Your Company",
-      website,
-      crawlResult.allContent
+    const maxPages = Math.max(
+      1,
+      parseInt(getSetting("max_crawl_pages") || "8", 10) || 8
     );
+    const screenshotsDir =
+      getSetting("screenshots_dir") || "./data/screenshots";
+    const crawlResult = await crawlWebsite(website, {
+      maxPages,
+      screenshotDir: screenshotsDir,
+      captureScreenshots: true,
+    });
+
+    if (!crawlResult.allContent.trim()) {
+      throw new Error(
+        `Website crawl returned no readable content for ${website}`
+      );
+    }
+
+    const prompt = buildCompanyProfilePrompt(website, crawlResult.allContent);
 
     const { parsed: profileData, model } = await callLLM({
       ...prompt,
-      schema: enrichmentResultSchema,
-      temperature: 0.3,
+      schema: companyProfileResultSchema,
+      temperature: 0.2,
       maxTokens: 1000,
     });
 
+    const fallbackName = new URL(website).hostname.replace(/^www\./i, "");
     const company = upsertCompanyProfile({
-      name: profileData.website_summary?.split(".")[0] || "My Company",
+      name: profileData.company_name.trim() || fallbackName,
       website,
-      description: profileData.website_summary,
-      services: JSON.stringify(profileData.services_needed || []),
-      industries_served: JSON.stringify([profileData.industry]),
-      differentiators: JSON.stringify([]),
+      description: profileData.description,
+      services: JSON.stringify(profileData.services_offered || []),
+      industries_served: JSON.stringify(
+        profileData.industry.trim() ? [profileData.industry] : []
+      ),
+      geographies: JSON.stringify(profileData.geographies_served || []),
+      differentiators: JSON.stringify(profileData.differentiators || []),
+      screenshots: JSON.stringify(crawlResult.screenshots || []),
       raw_content: crawlResult.allContent.slice(0, 50000),
       last_profiled_at: new Date().toISOString(),
     });

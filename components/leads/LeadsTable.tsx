@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Table,
@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ScoreBadge } from "@/components/leads/ScoreBadge";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import {
   Search,
   Mail,
@@ -32,7 +31,7 @@ import {
 } from "lucide-react";
 
 interface Lead {
-  id: string;
+  id: number;
   name: string;
   city: string;
   industry: string;
@@ -44,10 +43,16 @@ interface Lead {
 }
 
 interface LeadsResponse {
-  leads: Lead[];
-  total: number;
-  page: number;
-  per_page: number;
+  leads?: Lead[];
+  total?: number;
+  page?: number;
+  per_page?: number;
+  data?: Lead[];
+  pagination?: {
+    total?: number;
+    page?: number;
+    limit?: number;
+  };
 }
 
 type SortField =
@@ -94,11 +99,11 @@ export function LeadsTable() {
   const [hasWebsite, setHasWebsite] = useState(false);
 
   // Sort
-  const [sortField, setSortField] = useState<SortField>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortField, setSortField] = useState<SortField>("last_activity");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Selection
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -118,10 +123,25 @@ export function LeadsTable() {
       const res = await fetch(`/api/leads?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch leads");
       const data: LeadsResponse = await res.json();
-      setLeads(data.leads);
-      setTotal(data.total);
+
+      const nextLeads = Array.isArray(data.leads)
+        ? data.leads
+        : Array.isArray(data.data)
+          ? data.data
+          : [];
+      const nextTotal =
+        typeof data.total === "number"
+          ? data.total
+          : typeof data.pagination?.total === "number"
+            ? data.pagination.total
+            : nextLeads.length;
+
+      setLeads(nextLeads);
+      setTotal(nextTotal);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
+      setLeads([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -155,7 +175,7 @@ export function LeadsTable() {
     }
   };
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -257,7 +277,7 @@ export function LeadsTable() {
             onClick={() => bulkAction("enrich")}
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Enrich Selected
+            Enrich + Score
           </Button>
           <Button
             size="sm"
@@ -265,7 +285,7 @@ export function LeadsTable() {
             onClick={() => bulkAction("score")}
           >
             <BarChart3 className="h-3.5 w-3.5" />
-            Score Selected
+            Re-score Selected
           </Button>
           <Button
             size="sm"
@@ -355,7 +375,7 @@ export function LeadsTable() {
                     {lead.city}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {lead.industry}
+                    {lead.industry || "—"}
                   </TableCell>
                   <TableCell>
                     {lead.score != null ? lead.score : "—"}

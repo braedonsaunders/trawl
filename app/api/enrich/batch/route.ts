@@ -1,69 +1,89 @@
 import { NextResponse } from "next/server";
+import { startAgentRun, type AgentRunTracker } from "@/lib/agent/monitor";
 import { getLeadsByStatus, updateLeadStatus } from "@/lib/db/queries/leads";
-import { upsertEnrichment } from "@/lib/db/queries/enrichments";
-import { crawlWebsite } from "@/lib/playwright/crawler";
-import { callLLM } from "@/lib/llm/client";
-import { enrichmentResultSchema } from "@/lib/llm/schemas";
-import { buildEnrichmentPrompt } from "@/lib/llm/prompts/enrich";
+import {
+  enrichAndScoreLead,
+  resolveLeadStatusAfterAnalysis,
+} from "@/lib/leads/pipeline";
 
 export async function POST() {
+  let runTracker: AgentRunTracker | null = null;
+
   try {
     const leads = getLeadsByStatus("discovered");
+    runTracker = startAgentRun({
+      kind: "enrich_batch",
+      title: "Batch enrich pending leads",
+      summary: `Queued ${leads.length} discovered leads`,
+      metadata: {
+        total: leads.length,
+      },
+    });
+    runTracker.info("Loaded leads for batch enrichment", {
+      stage: "setup",
+      detail: `${leads.length} discovered leads`,
+    });
 
     let processed = 0;
+    let scored = 0;
     let failed = 0;
+    let scoreFailed = 0;
     const total = leads.length;
 
     for (const lead of leads) {
       try {
-        let rawContent = "";
+        runTracker.setSummary(`Processing ${processed + failed + 1} of ${total}`);
+        runTracker.progress(`Starting ${lead.name}`, {
+          stage: "lead",
+          detail: lead.website || "No website saved",
+          url: lead.website,
+        });
 
-        if (lead.website) {
-          const crawlResult = await crawlWebsite(lead.website, 4);
-          rawContent = crawlResult.allContent;
-        } else {
-          rawContent = `Company: ${lead.name}\nAddress: ${lead.address || "N/A"}\nCategories: ${lead.categories || "N/A"}\nRating: ${lead.google_rating || "N/A"}`;
-        }
-
-        const prompt = buildEnrichmentPrompt(
-          lead.name,
-          lead.website || "",
-          rawContent
+        const result = await enrichAndScoreLead(lead, runTracker);
+        updateLeadStatus(
+          lead.id,
+          resolveLeadStatusAfterAnalysis(lead.status, result.status)
         );
-
-        const { parsed: enrichmentData, model } = await callLLM({
-          ...prompt,
-          schema: enrichmentResultSchema,
-          temperature: 0.3,
-          maxTokens: 1000,
-        });
-
-        upsertEnrichment(lead.id, {
-          website_summary: enrichmentData.website_summary,
-          industry: enrichmentData.industry,
-          company_size: enrichmentData.company_size,
-          services_needed: JSON.stringify(enrichmentData.services_needed || []),
-          decision_maker_signals: enrichmentData.decision_maker_signals,
-          pain_points: enrichmentData.pain_points,
-          tech_stack: JSON.stringify(enrichmentData.tech_stack || []),
-          social_links: JSON.stringify(enrichmentData.social_links || {}),
-          raw_content: rawContent.slice(0, 50000),
-          enriched_at: new Date().toISOString(),
-          model_used: model,
-        });
-
-        updateLeadStatus(lead.id, "enriched");
+        if (result.score) {
+          scored++;
+        }
+        if (result.scoreError) {
+          scoreFailed++;
+        }
         processed++;
+        runTracker.success(`Finished ${lead.name}`, {
+          stage: "lead",
+          detail: result.score
+            ? "Enriched and scored"
+            : result.scoreError || "Enriched",
+        });
       } catch (err) {
         console.error(`[Batch Enrich] Failed for lead ${lead.id}:`, err);
         failed++;
+        runTracker.error(`Failed ${lead.name}`, {
+          stage: "lead",
+          detail: err instanceof Error ? err.message : "Unknown error occurred",
+          url: lead.website,
+        });
       }
     }
 
-    return NextResponse.json({ processed, failed, total });
+    runTracker.complete(
+      `Batch enrichment finished: ${processed}/${total} processed, ${failed} failed`
+    );
+
+    return NextResponse.json({
+      runId: runTracker.runId,
+      processed,
+      scored,
+      failed,
+      score_failed: scoreFailed,
+      total,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";
+    runTracker?.fail(error, `Batch enrichment failed: ${message}`);
     console.error("[POST /api/enrich/batch]", error);
     return NextResponse.json(
       { error: "Batch enrichment failed", detail: message },

@@ -9,19 +9,23 @@ import {
   Mail,
   Loader2,
 } from "lucide-react";
+import { LiveRunMonitor } from "@/components/agent/LiveRunMonitor";
 import { LeadDetail } from "@/components/leads/LeadDetail";
 
 export default function LeadDetailPage() {
   const params = useParams();
   const router = useRouter();
   const leadId = params.id as string;
+  const numericLeadId = Number.parseInt(leadId, 10);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   async function handleAction(endpoint: string, actionKey: string) {
     setActionLoading(actionKey);
     try {
       await fetch(endpoint, { method: "POST" });
+      setRefreshKey((current) => current + 1);
     } catch {
       // silently handle
     } finally {
@@ -54,7 +58,7 @@ export default function LeadDetailPage() {
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            Enrich
+            Enrich + Score
           </button>
 
           <button
@@ -69,7 +73,7 @@ export default function LeadDetailPage() {
             ) : (
               <Target className="h-4 w-4" />
             )}
-            Score
+            Re-score
           </button>
 
           <button
@@ -89,8 +93,18 @@ export default function LeadDetailPage() {
         </div>
       </div>
 
+      <LiveRunMonitor
+        title="Lead Run Trace"
+        description="Watch this lead’s crawl, enrichment, and scoring steps while they are in flight."
+        leadId={Number.isFinite(numericLeadId) ? numericLeadId : undefined}
+        limit={4}
+        eventLimit={5}
+        linkHref="/runs"
+        emptyMessage="Run enrichment or scoring to see the live trace for this lead."
+      />
+
       {/* Lead Detail Component */}
-      <LeadDetail leadId={leadId} />
+      <LeadDetail leadId={leadId} refreshKey={refreshKey} />
     </div>
   );
 }

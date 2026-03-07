@@ -1,15 +1,36 @@
 import type { ProviderId } from "@/lib/db/queries/provider-settings";
 import type { z } from "zod";
 
+export interface SocialLinks {
+  linkedin?: string;
+  twitter?: string;
+  facebook?: string;
+  instagram?: string;
+  youtube?: string;
+}
+
+export interface PotentialContact {
+  name?: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  linkedin_url?: string;
+  source?: string;
+  confidence?: number | null;
+}
+
 export interface EnrichmentResult {
   website_summary: string;
   industry: string;
   company_size: string;
+  employee_count_estimate: number | null;
+  employee_count_source: string;
   services_needed: string[];
   decision_maker_signals: string;
   pain_points: string;
   tech_stack: string[];
-  social_links: Record<string, string>;
+  social_links: SocialLinks;
+  potential_contacts: PotentialContact[];
 }
 
 export interface ScoringResult {

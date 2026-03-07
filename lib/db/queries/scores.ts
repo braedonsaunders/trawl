@@ -72,3 +72,8 @@ export function upsertScore(leadId: number, data: UpsertScoreData): Score {
     RETURNING *
   `).get(params) as Score;
 }
+
+export function deleteScore(leadId: number): void {
+  const db = getDb();
+  db.prepare("DELETE FROM lead_scores WHERE lead_id = ?").run(leadId);
+}
