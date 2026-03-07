@@ -18,41 +18,178 @@ export interface DatabaseClient {
   pragma(statement: string): void;
 }
 
+function isSqliteIoError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const details = error as Error & {
+    code?: string;
+    errcode?: number;
+    errstr?: string;
+  };
+
+  return (
+    details.code === "ERR_SQLITE_ERROR" &&
+    (details.errcode === 522 ||
+      /disk i\/o error/i.test(details.message) ||
+      /disk i\/o error/i.test(details.errstr ?? ""))
+  );
+}
+
+function ensureDatabaseDirectory(databasePath: string): void {
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+}
+
+function openDatabase(databasePath: string): DatabaseSync {
+  ensureDatabaseDirectory(databasePath);
+
+  const database = new DatabaseSync(databasePath, {
+    timeout: 5_000,
+    enableForeignKeyConstraints: true,
+  });
+
+  try {
+    database.exec("PRAGMA journal_mode = WAL");
+  } catch (error) {
+    if (!isSqliteIoError(error)) {
+      database.close();
+      throw error;
+    }
+
+    console.warn(
+      `[db] Unable to enable WAL mode for ${databasePath}; continuing with SQLite's current journal mode.`
+    );
+  }
+
+  database.exec("PRAGMA foreign_keys = ON");
+  return database;
+}
+
 class SqliteStatement implements DatabaseStatement {
-  constructor(private readonly statement: StatementSync) {}
+  constructor(
+    private readonly client: SqliteDatabaseClient,
+    private readonly sql: string,
+    private statement: StatementSync,
+    private generation: number
+  ) {}
+
+  private getStatement(): StatementSync {
+    if (this.generation !== this.client.getGeneration()) {
+      this.statement = this.client.prepareCurrent(this.sql);
+      this.generation = this.client.getGeneration();
+    }
+
+    return this.statement;
+  }
 
   all(...params: unknown[]): unknown[] {
-    return (
-      this.statement as unknown as { all: (...args: unknown[]) => unknown[] }
-    ).all(...params);
+    return this.client.runWithReconnect(() =>
+      (
+        this.getStatement() as unknown as {
+          all: (...args: unknown[]) => unknown[];
+        }
+      ).all(...params)
+    );
   }
 
   get(...params: unknown[]): unknown {
-    return (this.statement as unknown as { get: (...args: unknown[]) => unknown }).get(
-      ...params
+    return this.client.runWithReconnect(() =>
+      (
+        this.getStatement() as unknown as {
+          get: (...args: unknown[]) => unknown;
+        }
+      ).get(...params)
     );
   }
 
   run(...params: unknown[]): StatementResultingChanges {
-    return (
-      this.statement as unknown as {
-        run: (...args: unknown[]) => StatementResultingChanges;
-      }
-    ).run(...params);
+    try {
+      return (
+        this.getStatement() as unknown as {
+          run: (...args: unknown[]) => StatementResultingChanges;
+        }
+      ).run(...params);
+    } catch (error) {
+      this.client.recoverFromIoError(error);
+      throw error;
+    }
   }
 }
 
 class SqliteDatabaseClient implements DatabaseClient {
   private transactionDepth = 0;
+  private generation = 0;
+  private database: DatabaseSync;
 
-  constructor(private readonly database: DatabaseSync) {}
+  constructor(private readonly databasePath: string) {
+    this.database = openDatabase(databasePath);
+  }
+
+  close(): void {
+    this.database.close();
+  }
+
+  getGeneration(): number {
+    return this.generation;
+  }
+
+  prepareCurrent(sql: string): StatementSync {
+    return this.database.prepare(sql);
+  }
+
+  private reconnect(): void {
+    try {
+      if (this.database.isOpen) {
+        this.database.close();
+      }
+    } catch {
+      // Ignore close failures while trying to recover the connection.
+    }
+
+    this.database = openDatabase(this.databasePath);
+    this.generation += 1;
+    this.transactionDepth = 0;
+  }
+
+  recoverFromIoError(error: unknown): void {
+    if (!isSqliteIoError(error) || this.transactionDepth > 0) {
+      return;
+    }
+
+    console.warn("[db] SQLite I/O error detected; reopening the database connection.");
+    this.reconnect();
+  }
+
+  runWithReconnect<TResult>(operation: () => TResult): TResult {
+    let hasRetried = false;
+
+    while (true) {
+      try {
+        return operation();
+      } catch (error) {
+        if (!isSqliteIoError(error) || hasRetried || this.transactionDepth > 0) {
+          throw error;
+        }
+
+        this.recoverFromIoError(error);
+        hasRetried = true;
+      }
+    }
+  }
 
   exec(sql: string): void {
-    this.database.exec(sql);
+    try {
+      this.database.exec(sql);
+    } catch (error) {
+      this.recoverFromIoError(error);
+      throw error;
+    }
   }
 
   prepare(sql: string): DatabaseStatement {
-    return new SqliteStatement(this.database.prepare(sql));
+    const statement = this.runWithReconnect(() => this.database.prepare(sql));
+    return new SqliteStatement(this, sql, statement, this.generation);
   }
 
   transaction<TArgs extends unknown[], TResult>(
@@ -81,11 +218,19 @@ class SqliteDatabaseClient implements DatabaseClient {
 
         return result;
       } catch (error) {
-        if (depth === 0) {
-          this.database.exec("ROLLBACK");
-        } else {
-          this.database.exec(`ROLLBACK TO SAVEPOINT ${savepointName}`);
-          this.database.exec(`RELEASE SAVEPOINT ${savepointName}`);
+        try {
+          if (depth === 0) {
+            this.database.exec("ROLLBACK");
+          } else {
+            this.database.exec(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+            this.database.exec(`RELEASE SAVEPOINT ${savepointName}`);
+          }
+        } catch {
+          // Ignore rollback failures when SQLite has already lost the underlying file handle.
+        }
+
+        if (isSqliteIoError(error)) {
+          this.reconnect();
         }
 
         throw error;
@@ -96,11 +241,11 @@ class SqliteDatabaseClient implements DatabaseClient {
   }
 
   pragma(statement: string): void {
-    this.database.exec(`PRAGMA ${statement}`);
+    this.exec(`PRAGMA ${statement}`);
   }
 }
 
-let db: DatabaseClient | null = null;
+let db: SqliteDatabaseClient | null = null;
 
 function runMigrations(database: DatabaseClient): void {
   const migrationsDir = getMigrationsDir();
@@ -140,14 +285,14 @@ function runMigrations(database: DatabaseClient): void {
 export function getDb(): DatabaseClient {
   if (db) return db;
 
-  db = new SqliteDatabaseClient(new DatabaseSync(getDbPath()));
+  const client = new SqliteDatabaseClient(getDbPath());
 
-  // Enable WAL mode for better concurrent read performance
-  db.pragma("journal_mode = WAL");
-  // Enable foreign keys
-  db.pragma("foreign_keys = ON");
-
-  runMigrations(db);
-
-  return db;
+  try {
+    runMigrations(client);
+    db = client;
+    return db;
+  } catch (error) {
+    client.close();
+    throw error;
+  }
 }
