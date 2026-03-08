@@ -18,6 +18,19 @@ const potentialContactSchema = z.object({
   confidence: z.number().nullable().optional(),
 });
 
+const contactResearchCandidateSchema = z.object({
+  name: z.string().optional(),
+  title: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  linkedin_url: z.string().optional(),
+  facility_name: z.string().optional(),
+  source_label: z.string().optional(),
+  source_url: z.string().optional(),
+  notes: z.string().optional(),
+  confidence: z.number().nullable().optional(),
+});
+
 export const enrichmentResultSchema = z.object({
   website_summary: z.string(),
   industry: z.string(),
@@ -81,7 +94,7 @@ export const scoringResultSchema = z.object({
 });
 
 export const emailResultSchema = z.object({
-  subject_variants: z.tuple([z.string(), z.string(), z.string()]),
+  subject_variants: z.array(z.string()),
   body_html: z.string(),
   body_text: z.string(),
 });
@@ -90,4 +103,8 @@ export const handoffResultSchema = z.object({
   subject: z.string(),
   body_html: z.string(),
   body_text: z.string(),
+});
+
+export const contactResearchResultSchema = z.object({
+  contacts: z.array(contactResearchCandidateSchema),
 });

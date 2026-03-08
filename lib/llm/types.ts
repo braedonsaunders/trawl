@@ -43,7 +43,7 @@ export interface ScoringResult {
 }
 
 export interface EmailResult {
-  subject_variants: [string, string, string];
+  subject_variants: string[];
   body_html: string;
   body_text: string;
 }
@@ -52,6 +52,23 @@ export interface HandoffResult {
   subject: string;
   body_html: string;
   body_text: string;
+}
+
+export interface ContactResearchCandidate {
+  name?: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  linkedin_url?: string;
+  facility_name?: string;
+  source_label?: string;
+  source_url?: string;
+  notes?: string;
+  confidence?: number | null;
+}
+
+export interface ContactResearchResult {
+  contacts: ContactResearchCandidate[];
 }
 
 export interface LLMCallOptions<T> {

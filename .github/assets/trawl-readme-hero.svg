@@ -1,0 +1,81 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" rx="36" fill="#08111F"/>
+  <g opacity="0.95" filter="url(#blurA)">
+    <circle cx="270" cy="160" r="220" fill="#14B8A6"/>
+    <circle cx="1250" cy="180" r="250" fill="#3B82F6"/>
+    <circle cx="1320" cy="720" r="280" fill="#F97316"/>
+  </g>
+  <g opacity="0.28">
+    <path d="M0 120H1600" stroke="white" stroke-width="1"/>
+    <path d="M0 240H1600" stroke="white" stroke-width="1"/>
+    <path d="M0 360H1600" stroke="white" stroke-width="1"/>
+    <path d="M0 480H1600" stroke="white" stroke-width="1"/>
+    <path d="M0 600H1600" stroke="white" stroke-width="1"/>
+    <path d="M0 720H1600" stroke="white" stroke-width="1"/>
+    <path d="M200 0V900" stroke="white" stroke-width="1"/>
+    <path d="M400 0V900" stroke="white" stroke-width="1"/>
+    <path d="M600 0V900" stroke="white" stroke-width="1"/>
+    <path d="M800 0V900" stroke="white" stroke-width="1"/>
+    <path d="M1000 0V900" stroke="white" stroke-width="1"/>
+    <path d="M1200 0V900" stroke="white" stroke-width="1"/>
+    <path d="M1400 0V900" stroke="white" stroke-width="1"/>
+  </g>
+  <rect x="74" y="74" width="1452" height="752" rx="30" fill="url(#panel)" stroke="#FFFFFF" stroke-opacity="0.18"/>
+  <text x="138" y="190" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="116" font-weight="700" letter-spacing="10">TRAWL</text>
+  <text x="142" y="250" fill="#9FB2C8" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="600" letter-spacing="3">LOCAL-FIRST OUTBOUND INTELLIGENCE DESKTOP APP</text>
+  <text x="140" y="332" fill="#E5EEF8" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="600">Find real businesses. Read their sites. Rank the best ones.</text>
+  <text x="140" y="384" fill="#E5EEF8" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="600">Draft better outreach before the browser tab chaos starts.</text>
+
+  <g>
+    <rect x="140" y="448" width="210" height="54" rx="27" fill="#0F1E32" stroke="#1FD2BF"/>
+    <text x="174" y="482" fill="#DDFCF7" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Electron Desktop</text>
+    <rect x="370" y="448" width="166" height="54" rx="27" fill="#0F1E32" stroke="#60A5FA"/>
+    <text x="417" y="482" fill="#E2EEFF" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">SQLite</text>
+    <rect x="556" y="448" width="192" height="54" rx="27" fill="#0F1E32" stroke="#F59E0B"/>
+    <text x="599" y="482" fill="#FFF4D8" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Playwright</text>
+  </g>
+
+  <g>
+    <rect x="900" y="164" width="502" height="560" rx="28" fill="#07111E" stroke="#FFFFFF" stroke-opacity="0.12"/>
+    <rect x="930" y="202" width="160" height="18" rx="9" fill="#1FD2BF"/>
+    <rect x="1118" y="202" width="110" height="18" rx="9" fill="#F59E0B"/>
+    <rect x="1248" y="202" width="124" height="18" rx="9" fill="#60A5FA"/>
+    <rect x="930" y="252" width="442" height="116" rx="22" fill="#0D1A2A"/>
+    <text x="960" y="297" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Pipeline</text>
+    <rect x="960" y="318" width="78" height="16" rx="8" fill="#1FD2BF"/>
+    <rect x="1048" y="318" width="114" height="16" rx="8" fill="#24435B"/>
+    <rect x="1172" y="318" width="84" height="16" rx="8" fill="#24435B"/>
+    <rect x="960" y="344" width="236" height="8" rx="4" fill="#19304A"/>
+    <rect x="960" y="358" width="194" height="8" rx="4" fill="#19304A"/>
+    <rect x="930" y="396" width="206" height="138" rx="22" fill="#0D1A2A"/>
+    <rect x="1166" y="396" width="206" height="138" rx="22" fill="#0D1A2A"/>
+    <text x="960" y="440" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Hot Leads</text>
+    <text x="1196" y="440" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Draft Queue</text>
+    <text x="960" y="495" fill="#1FD2BF" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="700">37</text>
+    <text x="1196" y="495" fill="#60A5FA" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="700">12</text>
+    <rect x="960" y="510" width="110" height="10" rx="5" fill="#19304A"/>
+    <rect x="1196" y="510" width="110" height="10" rx="5" fill="#19304A"/>
+    <rect x="930" y="562" width="442" height="126" rx="22" fill="#0D1A2A"/>
+    <text x="960" y="606" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Recent activity</text>
+    <rect x="960" y="628" width="382" height="10" rx="5" fill="#1A2C42"/>
+    <rect x="960" y="650" width="290" height="10" rx="5" fill="#1A2C42"/>
+  </g>
+
+  <g>
+    <rect x="140" y="600" width="660" height="144" rx="26" fill="#07111E" stroke="#FFFFFF" stroke-opacity="0.12"/>
+    <text x="180" y="650" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700">Search -&gt; Enrich -&gt; Score -&gt; Draft -&gt; Close</text>
+    <text x="180" y="698" fill="#A9BBCD" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="500">A desktop command center for local-first outbound teams.</text>
+  </g>
+
+  <defs>
+    <filter id="blurA" x="-150" y="-150" width="1900" height="1300" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="120" result="effect1_foregroundBlur_1_1"/>
+    </filter>
+    <linearGradient id="panel" x1="100" y1="90" x2="1500" y2="830" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#091423"/>
+      <stop offset="1" stop-color="#07101D"/>
+    </linearGradient>
+  </defs>
+</svg>

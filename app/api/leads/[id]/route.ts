@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { getLeadById } from "@/lib/db/queries/leads";
 import { getEmailsByLeadId } from "@/lib/db/queries/emails";
-import { getConversationsByLeadId } from "@/lib/db/queries/conversations";
+import { listLeadContactsByLeadId } from "@/lib/db/queries/lead-contacts";
 import {
   formatLeadCategories,
-  parseStoredPotentialContacts,
   parseStoredSocialLinks,
   parseStoredStringArray,
 } from "@/lib/leads/format";
@@ -116,8 +115,7 @@ export async function GET(
     }
 
     const emails = getEmailsByLeadId(leadId);
-    const conversations = getConversationsByLeadId(leadId);
-
+    const contacts = listLeadContactsByLeadId(leadId);
     const enrichment = lead.enrichment;
     const score = lead.score;
     const firmographics = parseFirmographicsEvidence(
@@ -148,9 +146,38 @@ export async function GET(
       pain_points: parseStoredStringArray(enrichment?.pain_points),
       services_needed: parseStoredStringArray(enrichment?.services_needed),
       social_links: parseStoredSocialLinks(enrichment?.social_links),
-      potential_contacts: parseStoredPotentialContacts(
-        enrichment?.potential_contacts
-      ),
+      contacts: contacts.map((contact) => ({
+        id: contact.id,
+        name: toOptionalString(contact.name),
+        title: toOptionalString(contact.title),
+        email: toOptionalString(contact.email),
+        phone: toOptionalString(contact.phone),
+        linkedin_url: toOptionalString(contact.linkedin_url),
+        facility_name: toOptionalString(contact.facility_name),
+        source_type:
+          contact.source_type === "manual" ||
+          contact.source_type === "research" ||
+          contact.source_type === "enrichment"
+            ? contact.source_type
+            : "manual",
+        source_label: toOptionalString(contact.source_label),
+        source_url: toOptionalString(contact.source_url),
+        notes: toOptionalString(contact.notes),
+        confidence:
+          typeof contact.confidence === "number" &&
+          Number.isFinite(contact.confidence)
+            ? contact.confidence
+            : null,
+        status:
+          contact.status === "active" ||
+          contact.status === "suggested" ||
+          contact.status === "archived"
+            ? contact.status
+            : "active",
+        is_primary: Boolean(contact.is_primary),
+        created_at: contact.created_at,
+        updated_at: contact.updated_at,
+      })),
       fit_score: score?.fit_score ?? null,
       fit_tier:
         score?.fit_tier === "hot" ||
@@ -164,23 +191,13 @@ export async function GET(
       recommended_angle: toOptionalString(score?.recommended_angle),
       emails: emails.map((email) => ({
         id: email.id,
+        to_email: toOptionalString(email.to_email),
+        to_name: toOptionalString(email.to_name),
         subject: toOptionalString(email.subject) ?? "Untitled email",
         body: formatEmailBody(email.body_html, email.body_text),
         status: email.status,
         sent_at: email.sent_at,
         created_at: email.created_at,
-      })),
-      conversations: conversations.map((conversation) => ({
-        id: conversation.id,
-        direction: conversation.direction === "inbound" ? "inbound" : "outbound",
-        subject:
-          toOptionalString(conversation.sender) ??
-          (conversation.direction === "inbound"
-            ? "Inbound message"
-            : "Outbound message"),
-        body: toOptionalString(conversation.body) ?? "",
-        timestamp: conversation.received_at,
-        handoff_status: toOptionalString(conversation.handoff_tag),
       })),
     });
   } catch (error) {

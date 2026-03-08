@@ -20,9 +20,9 @@ import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 interface DashboardData {
   totalLeads: number;
   hotLeads: number;
-  emailsSentToday: number;
-  dailySendCap: number;
-  replies: number;
+  draftCount: number;
+  openedToday: number;
+  contacted: number;
   pipeline: {
     discovered: number;
     enriched: number;
@@ -101,15 +101,15 @@ export default function DashboardPage() {
       bg: "bg-orange-50",
     },
     {
-      label: "Emails Sent Today",
-      value: `${data?.emailsSentToday ?? 0} / ${data?.dailySendCap ?? 0}`,
+      label: "Drafts Ready",
+      value: data?.draftCount ?? 0,
       icon: Mail,
       color: "text-green-600",
       bg: "bg-green-50",
     },
     {
-      label: "Replies",
-      value: data?.replies ?? 0,
+      label: "Opened Today",
+      value: data?.openedToday ?? 0,
       icon: MessageSquare,
       color: "text-purple-600",
       bg: "bg-purple-50",

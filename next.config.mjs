@@ -1,5 +1,5 @@
 const nextConfig = {
-  serverExternalPackages: ["playwright", "imapflow", "nodemailer"],
+  serverExternalPackages: ["playwright"],
 };
 
 export default nextConfig;

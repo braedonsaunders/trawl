@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { getLeadCounts, getAllLeads } from "@/lib/db/queries/leads";
-import { getSetting } from "@/lib/db/queries/settings";
-import { getSentToday } from "@/lib/db/queries/emails";
+import { getEmailDraftCount, getOpenedToday } from "@/lib/db/queries/emails";
 
 export async function GET() {
   try {
     const pipeline = getLeadCounts();
-    const sentToday = getSentToday();
-    const dailyCap = parseInt(getSetting("daily_send_cap") || "50", 10);
+    const draftCount = getEmailDraftCount();
+    const openedToday = getOpenedToday();
 
     // Get recent leads for activity feed
     const recentLeads = getAllLeads({ sortBy: "updated_at", sortOrder: "desc" });
@@ -25,9 +24,9 @@ export async function GET() {
     return NextResponse.json({
       totalLeads,
       hotLeads,
-      emailsSentToday: sentToday,
-      dailySendCap: dailyCap,
-      replies: pipeline["replied"] || 0,
+      draftCount,
+      openedToday,
+      contacted: pipeline["contacted"] || 0,
       pipeline,
       recentActivity,
     });

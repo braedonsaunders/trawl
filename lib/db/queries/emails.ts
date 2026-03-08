@@ -16,6 +16,10 @@ export interface Email {
   created_at: string;
 }
 
+export interface EmailWithLead extends Email {
+  lead_name: string;
+}
+
 export interface CreateEmailDraftData {
   to_email?: string | null;
   to_name?: string | null;
@@ -99,12 +103,62 @@ export function getEmailDrafts(): Email[] {
     .all() as Email[];
 }
 
-export function getSentToday(): number {
+export function getEmailDraftsWithLead(): EmailWithLead[] {
   const db = getDb();
-  const row = db
+  return db
     .prepare(
-      "SELECT COUNT(*) as count FROM outreach_emails WHERE status = 'sent' AND date(sent_at) = date('now')"
+      `SELECT e.*, l.name AS lead_name
+       FROM outreach_emails e
+       INNER JOIN leads l ON l.id = e.lead_id
+       WHERE e.status = 'draft'
+       ORDER BY e.created_at DESC`
     )
-    .get() as { count: number };
+    .all() as EmailWithLead[];
+}
+
+export function getEmailHistoryWithLead(limit = 100): EmailWithLead[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT e.*, l.name AS lead_name
+       FROM outreach_emails e
+       INNER JOIN leads l ON l.id = e.lead_id
+       WHERE e.status <> 'draft'
+       ORDER BY COALESCE(e.sent_at, e.replied_at, e.created_at) DESC
+       LIMIT ?`
+    )
+    .all(limit) as EmailWithLead[];
+}
+
+export function getEmailsByIds(ids: number[]): Email[] {
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const db = getDb();
+  const placeholders = ids.map(() => "?").join(", ");
+  return db
+    .prepare(`SELECT * FROM outreach_emails WHERE id IN (${placeholders}) ORDER BY created_at DESC`)
+    .all(...ids) as Email[];
+}
+
+export function deleteEmailById(id: number): void {
+  const db = getDb();
+  db.prepare("DELETE FROM outreach_emails WHERE id = ?").run(id);
+}
+
+function getCount(query: string): number {
+  const db = getDb();
+  const row = db.prepare(query).get() as { count: number };
   return row.count;
+}
+
+export function getEmailDraftCount(): number {
+  return getCount("SELECT COUNT(*) as count FROM outreach_emails WHERE status = 'draft'");
+}
+
+export function getOpenedToday(): number {
+  return getCount(
+    "SELECT COUNT(*) as count FROM outreach_emails WHERE status = 'opened' AND date(sent_at) = date('now')"
+  );
 }

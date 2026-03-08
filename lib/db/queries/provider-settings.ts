@@ -182,6 +182,26 @@ export function saveProviderSetting(
   const provider = providerSetting.provider;
   const current = getProviderSetting(provider);
   const next = { ...current, ...providerSetting, provider };
+  const params = {
+    provider: next.provider,
+    auth_mode: next.auth_mode,
+    api_key: next.api_key,
+    base_url: next.base_url,
+    organization: next.organization,
+    project: next.project,
+    oauth_client_id: next.oauth_client_id,
+    oauth_client_secret: next.oauth_client_secret,
+    oauth_authorize_url: next.oauth_authorize_url,
+    oauth_token_url: next.oauth_token_url,
+    oauth_scope: next.oauth_scope,
+    oauth_audience: next.oauth_audience,
+    oauth_access_token: next.oauth_access_token,
+    oauth_refresh_token: next.oauth_refresh_token,
+    oauth_id_token: next.oauth_id_token,
+    oauth_token_type: next.oauth_token_type,
+    oauth_expires_at: next.oauth_expires_at,
+    oauth_connected_at: next.oauth_connected_at,
+  };
 
   db.prepare(`
     INSERT INTO provider_settings (
@@ -244,7 +264,7 @@ export function saveProviderSetting(
       oauth_expires_at = excluded.oauth_expires_at,
       oauth_connected_at = excluded.oauth_connected_at,
       updated_at = CURRENT_TIMESTAMP
-  `).run(next);
+  `).run(params);
 
   return getProviderSetting(provider);
 }

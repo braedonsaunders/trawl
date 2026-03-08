@@ -12,13 +12,9 @@ import {
   Save,
   Settings2,
   ShieldCheck,
-  Trash2,
-  Waypoints,
 } from "lucide-react";
 import type { ProviderId } from "@/lib/db/queries/provider-settings";
 import type {
-  ContactSetting,
-  HandoffRuleSetting,
   ProviderSettingsValue,
   SettingsPayload,
 } from "@/lib/settings";
@@ -414,78 +410,6 @@ export default function SettingsPage() {
           provider.provider === providerId ? { ...provider, ...patch } : provider
         ),
       },
-    }));
-  }
-
-  function updateContact(
-    id: string,
-    field: keyof ContactSetting,
-    value: string
-  ) {
-    setSettings((prev) => ({
-      ...prev,
-      handoffContacts: prev.handoffContacts.map((contact) =>
-        contact.id === id ? { ...contact, [field]: value } : contact
-      ),
-    }));
-  }
-
-  function updateRule(
-    id: string,
-    field: keyof HandoffRuleSetting,
-    value: string | number
-  ) {
-    setSettings((prev) => ({
-      ...prev,
-      handoffRules: prev.handoffRules.map((rule) =>
-        rule.id === id ? { ...rule, [field]: value } : rule
-      ),
-    }));
-  }
-
-  function addContact() {
-    setSettings((prev) => ({
-      ...prev,
-      handoffContacts: [
-        ...prev.handoffContacts,
-        {
-          id: crypto.randomUUID(),
-          name: "",
-          title: "",
-          email: "",
-          phone: "",
-          tag: "",
-        },
-      ],
-    }));
-  }
-
-  function addRule() {
-    setSettings((prev) => ({
-      ...prev,
-      handoffRules: [
-        ...prev.handoffRules,
-        {
-          id: crypto.randomUUID(),
-          condition: "",
-          assignTo: "",
-          priority: prev.handoffRules.length + 1,
-        },
-      ],
-    }));
-  }
-
-  function removeContact(id: string) {
-    setSettings((prev) => ({
-      ...prev,
-      handoffContacts: prev.handoffContacts.filter((contact) => contact.id !== id),
-    }));
-  }
-
-  function removeRule(id: string) {
-    setSettings((prev) => ({
-      ...prev,
-      handoffRules: prev.handoffRules.filter((rule) => rule.id !== id),
     }));
   }
 
@@ -1264,7 +1188,7 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold">Integrations</h2>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-3">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           <div className="space-y-3">
             <h3 className="text-sm font-semibold">Google Maps</h3>
             <div>
@@ -1288,71 +1212,21 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold">SMTP</h3>
-            {(
-              [
-                ["host", "Host"],
-                ["port", "Port"],
-                ["user", "User"],
-                ["pass", "Password"],
-                ["fromName", "From Name"],
-              ] as const
-            ).map(([key, label]) => (
-              <div key={key}>
-                <label className="mb-1.5 block text-sm font-medium">{label}</label>
-                <input
-                  type={key === "pass" ? "password" : "text"}
-                  value={settings.integrations.smtp[key]}
-                  onChange={(event) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      integrations: {
-                        ...prev.integrations,
-                        smtp: {
-                          ...prev.integrations.smtp,
-                          [key]: event.target.value,
-                        },
-                      },
-                    }))
-                  }
-                  className="h-10 w-full rounded-lg border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold">IMAP</h3>
-            {(
-              [
-                ["host", "Host"],
-                ["port", "Port"],
-                ["user", "User"],
-                ["pass", "Password"],
-              ] as const
-            ).map(([key, label]) => (
-              <div key={key}>
-                <label className="mb-1.5 block text-sm font-medium">{label}</label>
-                <input
-                  type={key === "pass" ? "password" : "text"}
-                  value={settings.integrations.imap[key]}
-                  onChange={(event) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      integrations: {
-                        ...prev.integrations,
-                        imap: {
-                          ...prev.integrations.imap,
-                          [key]: event.target.value,
-                        },
-                      },
-                    }))
-                  }
-                  className="h-10 w-full rounded-lg border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            ))}
+          <div className="rounded-2xl border bg-muted/30 p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Desktop Email App</h3>
+            </div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Trawl now opens generated drafts in the default mail application on
+              this computer. SMTP delivery, inbox polling, and auto-routing are
+              no longer part of the outreach workflow.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Use the Outreach screen to open one or many personalized drafts as
+              native compose windows, then make final edits and send from your own
+              mail client.
+            </p>
           </div>
         </div>
       </section>
@@ -1360,18 +1234,15 @@ export default function SettingsPage() {
       <section className="rounded-xl border bg-card p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <Settings2 className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Outreach Controls</h2>
+          <h2 className="text-lg font-semibold">Outreach Defaults</h2>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {(
             [
-              ["dailySendCap", "Daily Send Cap"],
-              ["sendDelaySeconds", "Send Delay (seconds)"],
               ["scoreThresholdHot", "Hot Score Threshold"],
               ["scoreThresholdWarm", "Warm Score Threshold"],
               ["enrichmentConcurrency", "Enrichment Concurrency"],
-              ["imapPollIntervalMinutes", "IMAP Poll Interval"],
               ["maxCrawlPages", "Max Crawl Pages"],
             ] as const
           ).map(([key, label]) => (
@@ -1447,129 +1318,10 @@ export default function SettingsPage() {
             />
           </div>
         </div>
-      </section>
 
-      <section className="rounded-xl border bg-card p-6 shadow-sm">
-        <div className="mb-4 flex items-center gap-2">
-          <Mail className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Handoff Contacts</h2>
-        </div>
-
-        <div className="space-y-3">
-          {settings.handoffContacts.map((contact) => (
-            <div
-              key={contact.id}
-              className="rounded-lg border bg-muted/20 p-4"
-            >
-              <div className="mb-3 flex justify-end">
-                <button
-                  onClick={() => removeContact(contact.id)}
-                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Remove
-                </button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-5">
-                {(
-                  [
-                    ["name", "Name"],
-                    ["title", "Title"],
-                    ["email", "Email"],
-                    ["phone", "Phone"],
-                    ["tag", "Tag"],
-                  ] as const
-                ).map(([field, label]) => (
-                  <div key={field}>
-                    <label className="mb-1.5 block text-sm font-medium">{label}</label>
-                    <input
-                      type="text"
-                      value={contact[field]}
-                      onChange={(event) =>
-                        updateContact(contact.id, field, event.target.value)
-                      }
-                      className="h-10 w-full rounded-lg border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <button
-            onClick={addContact}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
-          >
-            <Mail className="h-4 w-4" />
-            Add Contact
-          </button>
-        </div>
-      </section>
-
-      <section className="rounded-xl border bg-card p-6 shadow-sm">
-        <div className="mb-4 flex items-center gap-2">
-          <Waypoints className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Handoff Rules</h2>
-        </div>
-
-        <div className="space-y-3">
-          {settings.handoffRules.map((rule) => (
-            <div
-              key={rule.id}
-              className="rounded-lg border bg-muted/20 p-4"
-            >
-              <div className="mb-3 flex justify-end">
-                <button
-                  onClick={() => removeRule(rule.id)}
-                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Remove
-                </button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_140px]">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">Condition</label>
-                  <input
-                    type="text"
-                    value={rule.condition}
-                    onChange={(event) =>
-                      updateRule(rule.id, "condition", event.target.value)
-                    }
-                    className="h-10 w-full rounded-lg border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">Assign To</label>
-                  <input
-                    type="text"
-                    value={rule.assignTo}
-                    onChange={(event) =>
-                      updateRule(rule.id, "assignTo", event.target.value)
-                    }
-                    className="h-10 w-full rounded-lg border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">Priority</label>
-                  <input
-                    type="number"
-                    value={rule.priority}
-                    onChange={(event) =>
-                      updateRule(rule.id, "priority", Number(event.target.value))
-                    }
-                    className="h-10 w-full rounded-lg border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-          <button
-            onClick={addRule}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
-          >
-            <Waypoints className="h-4 w-4" />
-            Add Rule
-          </button>
+        <div className="mt-5 rounded-2xl border border-dashed bg-muted/20 p-4 text-sm leading-6 text-muted-foreground">
+          Sender name and title influence the personalized draft copy that Trawl
+          generates before opening it in your mail app.
         </div>
       </section>
     </div>

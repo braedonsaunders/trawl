@@ -1,13 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScoreBadge } from "@/components/leads/ScoreBadge";
-import { cn } from "@/lib/utils";
-import type { PotentialContact, SocialLinks } from "@/lib/llm/types";
+import type { SocialLinks } from "@/lib/llm/types";
+import { openMailtoUrls } from "@/lib/email/open-mailto";
 import {
   Globe,
   Phone,
@@ -23,8 +34,12 @@ import {
   Lightbulb,
   AlertTriangle,
   CheckCircle2,
-  MessageSquare,
   ArrowUpRight,
+  Plus,
+  Pencil,
+  Search,
+  Star,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -61,7 +76,7 @@ interface LeadData {
   pain_points: string[];
   services_needed: string[];
   social_links: SocialLinks;
-  potential_contacts: PotentialContact[];
+  contacts: SavedContact[];
   // Score
   fit_score: number | null;
   fit_tier: "hot" | "warm" | "cold" | null;
@@ -71,26 +86,36 @@ interface LeadData {
   recommended_angle: string | null;
   // Emails
   emails: EmailData[];
-  // Conversations
-  conversations: ConversationMessage[];
+}
+
+interface SavedContact {
+  id: number;
+  name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  facility_name: string | null;
+  source_type: "manual" | "research" | "enrichment";
+  source_label: string | null;
+  source_url: string | null;
+  notes: string | null;
+  confidence: number | null;
+  status: "active" | "suggested" | "archived";
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 interface EmailData {
   id: number;
+  to_email: string | null;
+  to_name: string | null;
   subject: string;
   body: string;
   status: string;
   sent_at: string | null;
   created_at: string;
-}
-
-interface ConversationMessage {
-  id: number;
-  direction: "inbound" | "outbound";
-  subject: string;
-  body: string;
-  timestamp: string;
-  handoff_status: string | null;
 }
 
 interface LeadDetailProps {
@@ -138,23 +163,24 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchLead() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/leads/${leadId}`);
-        if (!res.ok) throw new Error("Failed to load lead");
-        const data = await res.json();
-        setLead(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
-      } finally {
-        setLoading(false);
-      }
+  const fetchLead = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/leads/${leadId}`);
+      if (!res.ok) throw new Error("Failed to load lead");
+      const data = await res.json();
+      setLead(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
     }
-    fetchLead();
-  }, [leadId, refreshKey]);
+  }, [leadId]);
+
+  useEffect(() => {
+    void fetchLead();
+  }, [fetchLead, refreshKey]);
 
   if (loading) {
     return (
@@ -183,12 +209,8 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
       lead.services_needed.length > 0 ||
       Object.keys(lead.social_links).length > 0
   );
-  const hasContacts = Boolean(
-    lead.phone ||
-      lead.website ||
-      lead.potential_contacts.length > 0
-  );
   const location = [lead.city, lead.state].filter(Boolean).join(", ");
+  const hasCompanyContactCard = Boolean(lead.website || lead.phone || location);
   const socialEntries = Object.entries(lead.social_links).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string"
   );
@@ -225,7 +247,6 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
           <TabsTrigger value="enrichment">Enrichment</TabsTrigger>
           <TabsTrigger value="score">Score</TabsTrigger>
           <TabsTrigger value="emails">Emails</TabsTrigger>
-          <TabsTrigger value="conversations">Conversations</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -312,213 +333,96 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
 
         {/* Contacts Tab */}
         <TabsContent value="contacts">
-          {hasContacts ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              {(lead.website || lead.phone || location) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Building2 className="h-4 w-4" />
-                      Company Contact
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-3">
-                      {lead.website && (
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm text-muted-foreground">
-                            Website
-                          </span>
-                          <a
-                            href={toExternalHref(lead.website)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                          >
-                            {getWebsiteHost(lead.website)}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                      )}
-                      {lead.phone && (
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm text-muted-foreground">
-                            Phone
-                          </span>
-                          <a
-                            href={getPhoneHref(lead.phone)}
-                            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                          >
-                            {lead.phone}
-                            <Phone className="h-3 w-3" />
-                          </a>
-                        </div>
-                      )}
-                      {location && (
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm text-muted-foreground">
-                            Location
-                          </span>
-                          <span className="text-sm font-medium">{location}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {(lead.website || lead.phone) && (
-                      <div className="flex flex-wrap gap-2">
-                        {lead.website && (
-                          <ActionLink
-                            href={toExternalHref(lead.website)}
-                            icon={Globe}
-                            label="Visit Website"
-                            external
-                          />
-                        )}
-                        {lead.phone && (
-                          <ActionLink
-                            href={getPhoneHref(lead.phone)}
-                            icon={Phone}
-                            label="Call Business"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card className="md:col-span-2">
+          <div className="grid gap-4 md:grid-cols-2">
+            {hasCompanyContactCard && (
+              <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <Users className="h-4 w-4" />
-                    Potential Contacts
+                    <Building2 className="h-4 w-4" />
+                    Company Contact
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  {lead.potential_contacts.length > 0 ? (
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {lead.potential_contacts.map((contact, index) => {
-                        const displayName =
-                          contact.name || contact.title || "Unnamed contact";
-                        const subtitle =
-                          contact.name && contact.title ? contact.title : null;
-                        const hasActions = Boolean(
-                          contact.email ||
-                            contact.phone ||
-                            contact.linkedin_url
-                        );
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    {lead.website && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-muted-foreground">
+                          Website
+                        </span>
+                        <a
+                          href={toExternalHref(lead.website)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                        >
+                          {getWebsiteHost(lead.website)}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    )}
+                    {lead.phone && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-muted-foreground">
+                          Phone
+                        </span>
+                        <a
+                          href={getPhoneHref(lead.phone)}
+                          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                        >
+                          {lead.phone}
+                          <Phone className="h-3 w-3" />
+                        </a>
+                      </div>
+                    )}
+                    {location && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-muted-foreground">
+                          Location
+                        </span>
+                        <span className="text-sm font-medium">{location}</span>
+                      </div>
+                    )}
+                  </div>
 
-                        return (
-                          <div
-                            key={`${displayName}-${index}`}
-                            className="rounded-lg border p-4"
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div>
-                                <p className="font-medium">{displayName}</p>
-                                {subtitle && (
-                                  <p className="text-sm text-muted-foreground">
-                                    {subtitle}
-                                  </p>
-                                )}
-                              </div>
-                              {typeof contact.confidence === "number" && (
-                                <Badge variant="outline">
-                                  {Math.round(contact.confidence * 100)}% confidence
-                                </Badge>
-                              )}
-                            </div>
-
-                            <div className="mt-3 space-y-2 text-sm">
-                              {contact.email && (
-                                <a
-                                  href={getEmailHref(contact.email)}
-                                  className="inline-flex items-center gap-2 text-primary hover:underline"
-                                >
-                                  <Mail className="h-3.5 w-3.5" />
-                                  {contact.email}
-                                </a>
-                              )}
-                              {contact.phone && (
-                                <a
-                                  href={getPhoneHref(contact.phone)}
-                                  className="flex items-center gap-2 text-primary hover:underline"
-                                >
-                                  <Phone className="h-3.5 w-3.5" />
-                                  {contact.phone}
-                                </a>
-                              )}
-                              {contact.linkedin_url && (
-                                <a
-                                  href={toExternalHref(contact.linkedin_url)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 text-primary hover:underline"
-                                >
-                                  <ExternalLink className="h-3.5 w-3.5" />
-                                  LinkedIn profile
-                                </a>
-                              )}
-                              {!hasActions && (
-                                <p className="text-muted-foreground">
-                                  No direct contact method surfaced yet.
-                                </p>
-                              )}
-                            </div>
-
-                            {hasActions && (
-                              <div className="mt-4 flex flex-wrap gap-2">
-                                {contact.email && (
-                                  <ActionLink
-                                    href={getEmailHref(contact.email)}
-                                    icon={Mail}
-                                    label="Email"
-                                  />
-                                )}
-                                {contact.phone && (
-                                  <ActionLink
-                                    href={getPhoneHref(contact.phone)}
-                                    icon={Phone}
-                                    label="Call"
-                                  />
-                                )}
-                                {contact.linkedin_url && (
-                                  <ActionLink
-                                    href={toExternalHref(contact.linkedin_url)}
-                                    icon={ExternalLink}
-                                    label="Open LinkedIn"
-                                    external
-                                  />
-                                )}
-                              </div>
-                            )}
-
-                            {contact.source && (
-                              <p className="mt-3 text-xs text-muted-foreground">
-                                Source: {contact.source}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-                      No individual contacts identified yet. Run enrichment to
-                      extract decision-makers and contact details.
+                  {(lead.website || lead.phone) && (
+                    <div className="flex flex-wrap gap-2">
+                      {lead.website && (
+                        <ActionLink
+                          href={toExternalHref(lead.website)}
+                          icon={Globe}
+                          label="Visit Website"
+                          external
+                        />
+                      )}
+                      {lead.phone && (
+                        <ActionLink
+                          href={getPhoneHref(lead.phone)}
+                          icon={Phone}
+                          label="Call Business"
+                        />
+                      )}
                     </div>
                   )}
                 </CardContent>
               </Card>
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="flex h-32 items-center justify-center text-muted-foreground">
-                No contact data yet. Run enrichment or add lead contact details
-                to populate this tab.
+            )}
+
+            <Card className={hasCompanyContactCard ? "md:col-span-2" : undefined}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="h-4 w-4" />
+                  Contact Directory
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ContactsDirectory
+                  leadId={lead.id}
+                  contacts={lead.contacts}
+                  onRefresh={fetchLead}
+                />
               </CardContent>
             </Card>
-          )}
+          </div>
         </TabsContent>
 
         {/* Enrichment Tab */}
@@ -840,12 +744,7 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
 
         {/* Emails Tab */}
         <TabsContent value="emails">
-          <EmailsList emails={lead.emails} />
-        </TabsContent>
-
-        {/* Conversations Tab */}
-        <TabsContent value="conversations">
-          <ConversationsView messages={lead.conversations} />
+          <EmailsList emails={lead.emails} onRefresh={fetchLead} />
         </TabsContent>
       </Tabs>
     </div>
@@ -878,8 +777,838 @@ function ActionLink({
   );
 }
 
-function EmailsList({ emails }: { emails: EmailData[] }) {
+interface ContactFormState {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+  linkedin_url: string;
+  facility_name: string;
+  notes: string;
+  is_primary: boolean;
+}
+
+interface ContactSeed {
+  name?: string | null;
+  title?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  linkedin_url?: string | null;
+  facility_name?: string | null;
+  notes?: string | null;
+  is_primary?: boolean;
+}
+
+interface DirectoryFeedback {
+  kind: "error" | "success";
+  message: string;
+}
+
+const EMPTY_CONTACT_FORM_STATE: ContactFormState = {
+  name: "",
+  title: "",
+  email: "",
+  phone: "",
+  linkedin_url: "",
+  facility_name: "",
+  notes: "",
+  is_primary: false,
+};
+
+function createContactFormState(contact?: ContactSeed): ContactFormState {
+  return {
+    name: contact?.name ?? "",
+    title: contact?.title ?? "",
+    email: contact?.email ?? "",
+    phone: contact?.phone ?? "",
+    linkedin_url: contact?.linkedin_url ?? "",
+    facility_name: contact?.facility_name ?? "",
+    notes: contact?.notes ?? "",
+    is_primary: Boolean(contact?.is_primary),
+  };
+}
+
+function getContactDisplayName(contact: {
+  name?: string | null;
+  title?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}): string {
+  return (
+    contact.name?.trim() ||
+    contact.title?.trim() ||
+    contact.email?.trim() ||
+    contact.phone?.trim() ||
+    "Unnamed contact"
+  );
+}
+
+function formatContactConfidence(confidence: number | null | undefined): string | null {
+  if (typeof confidence !== "number" || !Number.isFinite(confidence)) {
+    return null;
+  }
+
+  return `${Math.round(confidence * 100)}% confidence`;
+}
+
+function getContactSourceLabel(contact: SavedContact): string {
+  if (contact.source_label?.trim()) {
+    return contact.source_label.trim();
+  }
+
+  switch (contact.source_type) {
+    case "research":
+      return "Deep find";
+    case "enrichment":
+      return "Enrichment";
+    default:
+      return "Manual";
+  }
+}
+
+async function getResponseDetail(
+  response: Response,
+  fallback: string
+): Promise<string> {
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    detail?: string;
+  };
+
+  if (typeof payload.detail === "string" && payload.detail.trim().length > 0) {
+    return payload.detail;
+  }
+
+  if (typeof payload.error === "string" && payload.error.trim().length > 0) {
+    return payload.error;
+  }
+
+  return fallback;
+}
+
+function ContactsDirectory({
+  leadId,
+  contacts,
+  onRefresh,
+}: {
+  leadId: number;
+  contacts: SavedContact[];
+  onRefresh: () => Promise<void>;
+}) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<SavedContact | null>(null);
+  const [formState, setFormState] = useState<ContactFormState>(
+    EMPTY_CONTACT_FORM_STATE
+  );
+  const [feedback, setFeedback] = useState<DirectoryFeedback | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const activeContacts = contacts.filter((contact) => contact.status === "active");
+  const suggestedContacts = contacts.filter(
+    (contact) => contact.status === "suggested"
+  );
+
+  function resetDialog() {
+    setDialogOpen(false);
+    setEditingContact(null);
+    setFormState(EMPTY_CONTACT_FORM_STATE);
+  }
+
+  function openNewContactDialog(seed?: ContactSeed) {
+    setEditingContact(null);
+    setFormState(createContactFormState(seed));
+    setDialogOpen(true);
+  }
+
+  function openEditDialog(contact: SavedContact) {
+    setEditingContact(contact);
+    setFormState(createContactFormState(contact));
+    setDialogOpen(true);
+  }
+
+  async function refreshDirectory(successMessage: string) {
+    await onRefresh();
+    setFeedback({
+      kind: "success",
+      message: successMessage,
+    });
+  }
+
+  async function updateExistingContact(
+    contactId: number,
+    payload: Record<string, unknown>,
+    options: {
+      busyKey: string;
+      successMessage: string;
+      errorMessage: string;
+    }
+  ) {
+    setBusyKey(options.busyKey);
+    setFeedback(null);
+
+    try {
+      const response = await fetch(`/api/leads/${leadId}/contacts/${contactId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(await getResponseDetail(response, options.errorMessage));
+      }
+
+      await refreshDirectory(options.successMessage);
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message:
+          error instanceof Error ? error.message : options.errorMessage,
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (
+      ![
+        formState.name,
+        formState.title,
+        formState.email,
+        formState.phone,
+        formState.linkedin_url,
+      ].some((value) => value.trim().length > 0)
+    ) {
+      setFeedback({
+        kind: "error",
+        message:
+          "Add at least one contact field such as name, title, email, phone, or LinkedIn URL.",
+      });
+      return;
+    }
+
+    setBusyKey("save-contact");
+    setFeedback(null);
+
+    const payload = {
+      name: formState.name,
+      title: formState.title,
+      email: formState.email,
+      phone: formState.phone,
+      linkedin_url: formState.linkedin_url,
+      facility_name: formState.facility_name,
+      notes: formState.notes,
+      is_primary: formState.is_primary,
+    };
+
+    try {
+      const response = await fetch(
+        editingContact
+          ? `/api/leads/${leadId}/contacts/${editingContact.id}`
+          : `/api/leads/${leadId}/contacts`,
+        {
+          method: editingContact ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseDetail(
+            response,
+            editingContact ? "Failed to update contact." : "Failed to add contact."
+          )
+        );
+      }
+
+      resetDialog();
+      await refreshDirectory(
+        editingContact ? "Contact updated." : "Contact added."
+      );
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : editingContact
+              ? "Failed to update contact."
+              : "Failed to add contact.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleApprove(contact: SavedContact) {
+    await updateExistingContact(
+      contact.id,
+      { status: "active" },
+      {
+        busyKey: `approve-${contact.id}`,
+        successMessage: "Contact approved and added to the active directory.",
+        errorMessage: "Failed to approve contact.",
+      }
+    );
+  }
+
+  async function handleMakePrimary(contact: SavedContact) {
+    await updateExistingContact(
+      contact.id,
+      { is_primary: true, status: "active" },
+      {
+        busyKey: `primary-${contact.id}`,
+        successMessage: "Primary contact updated.",
+        errorMessage: "Failed to set primary contact.",
+      }
+    );
+  }
+
+  async function handleDismiss(contact: SavedContact) {
+    if (!window.confirm(`Dismiss ${getContactDisplayName(contact)} from this lead?`)) {
+      return;
+    }
+
+    await updateExistingContact(
+      contact.id,
+      { status: "archived" },
+      {
+        busyKey: `dismiss-${contact.id}`,
+        successMessage: "Suggestion dismissed.",
+        errorMessage: "Failed to dismiss contact suggestion.",
+      }
+    );
+  }
+
+  async function handleDelete(contact: SavedContact) {
+    if (!window.confirm(`Delete ${getContactDisplayName(contact)} from this lead?`)) {
+      return;
+    }
+
+    setBusyKey(`delete-${contact.id}`);
+    setFeedback(null);
+
+    try {
+      const response = await fetch(`/api/leads/${leadId}/contacts/${contact.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error(await getResponseDetail(response, "Failed to delete contact."));
+      }
+
+      await refreshDirectory("Contact removed.");
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message:
+          error instanceof Error ? error.message : "Failed to delete contact.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleDeepFind() {
+    setBusyKey("deep-find");
+    setFeedback(null);
+
+    try {
+      const response = await fetch(`/api/leads/${leadId}/contacts/deep-find`, {
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        detail?: string;
+        contacts_found?: number;
+        contacts_saved?: number;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          payload.detail || payload.error || "Deep contact research failed."
+        );
+      }
+
+      await onRefresh();
+
+      const found = typeof payload.contacts_found === "number" ? payload.contacts_found : 0;
+      const saved = typeof payload.contacts_saved === "number" ? payload.contacts_saved : 0;
+
+      setFeedback({
+        kind: "success",
+        message:
+          saved > 0
+            ? `Deep find saved ${saved} contact suggestion${saved === 1 ? "" : "s"} for review.`
+            : found > 0
+              ? "Deep find completed, but every strong match was already in the directory."
+              : "Deep find completed without a strong local facility contact match.",
+      });
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Deep contact research failed.",
+      });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function renderContactCard(contact: SavedContact) {
+    const confidence = formatContactConfidence(contact.confidence);
+    const isBusy = busyKey != null;
+
+    return (
+      <div key={contact.id} className="rounded-xl border bg-card p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">
+              {getContactDisplayName(contact)}
+            </p>
+            {contact.name && contact.title && (
+              <p className="text-sm text-muted-foreground">{contact.title}</p>
+            )}
+            {contact.facility_name && (
+              <p className="text-xs text-muted-foreground">
+                {contact.facility_name}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {contact.is_primary && <Badge>Primary</Badge>}
+            <Badge variant={contact.status === "suggested" ? "outline" : "secondary"}>
+              {contact.status === "suggested" ? "Suggested" : "Active"}
+            </Badge>
+            <Badge variant="outline">{getContactSourceLabel(contact)}</Badge>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2 text-sm">
+          {contact.email && (
+            <a
+              href={getEmailHref(contact.email)}
+              className="flex items-center gap-2 text-primary hover:underline"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              {contact.email}
+            </a>
+          )}
+          {contact.phone && (
+            <a
+              href={getPhoneHref(contact.phone)}
+              className="flex items-center gap-2 text-primary hover:underline"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              {contact.phone}
+            </a>
+          )}
+          {contact.linkedin_url && (
+            <a
+              href={toExternalHref(contact.linkedin_url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-primary hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              LinkedIn profile
+            </a>
+          )}
+          {contact.source_url && (
+            <a
+              href={toExternalHref(contact.source_url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-primary hover:underline"
+            >
+              <Search className="h-3.5 w-3.5" />
+              View source
+            </a>
+          )}
+          {(confidence || contact.notes) && (
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {confidence && <p>{confidence}</p>}
+              {contact.notes && <p>{contact.notes}</p>}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {contact.status === "suggested" && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleApprove(contact)}
+              disabled={isBusy}
+            >
+              {busyKey === `approve-${contact.id}` ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              )}
+              Approve
+            </Button>
+          )}
+          {!contact.is_primary && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleMakePrimary(contact)}
+              disabled={isBusy}
+            >
+              {busyKey === `primary-${contact.id}` ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Star className="h-3.5 w-3.5" />
+              )}
+              Make Primary
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => openEditDialog(contact)}
+            disabled={isBusy}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() =>
+              void (contact.status === "suggested"
+                ? handleDismiss(contact)
+                : handleDelete(contact))
+            }
+            disabled={isBusy}
+          >
+            {busyKey === `dismiss-${contact.id}` ||
+            busyKey === `delete-${contact.id}` ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            {contact.status === "suggested" ? "Dismiss" : "Delete"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">Manage lead contacts</p>
+          <p className="text-sm text-muted-foreground">
+            Add manual contacts, approve research suggestions, and run a deeper
+            public-web search for local plant or facility decision makers.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => openNewContactDialog()}
+            disabled={busyKey != null}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Contact
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void handleDeepFind()}
+            disabled={busyKey != null}
+          >
+            {busyKey === "deep-find" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Search className="h-3.5 w-3.5" />
+            )}
+            Deep Find Contacts
+          </Button>
+        </div>
+      </div>
+
+      {feedback && (
+        <div
+          className={
+            feedback.kind === "error"
+              ? "rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+              : "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          }
+        >
+          {feedback.message}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Saved Contacts</h3>
+          <span className="text-xs text-muted-foreground">
+            {activeContacts.length} active
+          </span>
+        </div>
+        {activeContacts.length > 0 ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {activeContacts.map((contact) => renderContactCard(contact))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+            No saved contacts yet. Add one manually or run enrichment/deep find.
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Suggested Contacts</h3>
+          <span className="text-xs text-muted-foreground">
+            {suggestedContacts.length} pending review
+          </span>
+        </div>
+        {suggestedContacts.length > 0 ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            {suggestedContacts.map((contact) => renderContactCard(contact))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+            No suggested contacts waiting for review.
+          </div>
+        )}
+      </div>
+
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (busyKey === "save-contact") {
+            return;
+          }
+
+          if (!open) {
+            resetDialog();
+            return;
+          }
+
+          setDialogOpen(true);
+        }}
+      >
+        <DialogContent>
+          <DialogClose onClick={resetDialog} />
+          <DialogHeader>
+            <DialogTitle>
+              {editingContact ? "Edit Contact" : "Add Contact"}
+            </DialogTitle>
+            <DialogDescription>
+              Saved contacts appear in the lead recipient picker and can be
+              marked as the primary outreach contact.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Name</label>
+                <Input
+                  value={formState.name}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="Jordan Smith"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Title</label>
+                <Input
+                  value={formState.title}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                  placeholder="Plant Manager"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  type="email"
+                  value={formState.email}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
+                  }
+                  placeholder="jordan@company.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Phone</label>
+                <Input
+                  value={formState.phone}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      phone: event.target.value,
+                    }))
+                  }
+                  placeholder="(555) 555-1234"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Facility</label>
+                <Input
+                  value={formState.facility_name}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      facility_name: event.target.value,
+                    }))
+                  }
+                  placeholder="Hamilton Plant"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">LinkedIn URL</label>
+                <Input
+                  value={formState.linkedin_url}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      linkedin_url: event.target.value,
+                    }))
+                  }
+                  placeholder="https://www.linkedin.com/in/..."
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea
+                value={formState.notes}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
+                placeholder="Local facility details, source notes, or buying context."
+                rows={4}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setFormState((current) => ({
+                  ...current,
+                  is_primary: !current.is_primary,
+                }))
+              }
+              className={buttonVariants({
+                variant: formState.is_primary ? "default" : "outline",
+                size: "sm",
+              })}
+            >
+              <Star className="h-3.5 w-3.5" />
+              {formState.is_primary ? "Primary Contact" : "Mark As Primary"}
+            </button>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetDialog}
+                disabled={busyKey === "save-contact"}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busyKey === "save-contact"}>
+                {busyKey === "save-contact" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Users className="h-4 w-4" />
+                )}
+                {editingContact ? "Save Changes" : "Add Contact"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function formatEmailStatus(status: string): string {
+  switch (status) {
+    case "opened":
+      return "Opened in Mail";
+    case "sent":
+      return "Sent (Legacy)";
+    case "replied":
+      return "Replied (Legacy)";
+    case "bounced":
+      return "Bounced (Legacy)";
+    default:
+      return status.replace(/_/g, " ");
+  }
+}
+
+function EmailsList({
+  emails,
+  onRefresh,
+}: {
+  emails: EmailData[];
+  onRefresh: () => Promise<void>;
+}) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [openingId, setOpeningId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleOpenDraft(emailId: number) {
+    setOpeningId(emailId);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/email/draft/${emailId}`, { method: "POST" });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(
+          payload.detail || payload.error || "Failed to open draft in mail app"
+        );
+      }
+
+      await openMailtoUrls([payload.mailtoUrl]);
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to open draft");
+    } finally {
+      setOpeningId(null);
+    }
+  }
 
   if (emails.length === 0) {
     return (
@@ -893,8 +1622,15 @@ function EmailsList({ emails }: { emails: EmailData[] }) {
 
   return (
     <div className="space-y-2">
+      {error && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {emails.map((email) => {
         const isExpanded = expandedId === email.id;
+        const isOpening = openingId === email.id;
         return (
           <Card key={email.id}>
             <button
@@ -908,15 +1644,18 @@ function EmailsList({ emails }: { emails: EmailData[] }) {
                   <p className="text-sm font-medium">{email.subject}</p>
                   <p className="text-xs text-muted-foreground">
                     {email.sent_at
-                      ? `Sent ${new Date(email.sent_at).toLocaleDateString()}`
+                      ? `Opened ${new Date(email.sent_at).toLocaleDateString()}`
                       : `Created ${new Date(email.created_at).toLocaleDateString()}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {email.to_email || "Recipient email not found"}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge
                   variant={
-                    email.status === "sent"
+                    email.status === "opened" || email.status === "sent"
                       ? "default"
                       : email.status === "draft"
                         ? "secondary"
@@ -924,7 +1663,7 @@ function EmailsList({ emails }: { emails: EmailData[] }) {
                   }
                   className="capitalize"
                 >
-                  {email.status}
+                  {formatEmailStatus(email.status)}
                 </Badge>
                 {isExpanded ? (
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -935,6 +1674,27 @@ function EmailsList({ emails }: { emails: EmailData[] }) {
             </button>
             {isExpanded && (
               <CardContent className="border-t pt-4">
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenDraft(email.id)}
+                    disabled={isOpening || !email.to_email}
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    {isOpening ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Mail className="h-3.5 w-3.5" />
+                    )}
+                    {email.status === "opened" ? "Draft Again" : "Open In Mail"}
+                  </button>
+                  {!email.to_email && (
+                    <span className="text-xs text-amber-700">
+                      A recipient email needs to be surfaced before this draft can
+                      be opened in your mail app.
+                    </span>
+                  )}
+                </div>
                 <div
                   className="prose prose-sm max-w-none dark:prose-invert"
                   dangerouslySetInnerHTML={{ __html: email.body }}
@@ -944,61 +1704,6 @@ function EmailsList({ emails }: { emails: EmailData[] }) {
           </Card>
         );
       })}
-    </div>
-  );
-}
-
-function ConversationsView({
-  messages,
-}: {
-  messages: ConversationMessage[];
-}) {
-  if (messages.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex h-32 items-center justify-center text-muted-foreground">
-          No conversations yet.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {messages.map((msg) => (
-        <Card
-          key={msg.id}
-          className={cn(
-            msg.direction === "outbound" ? "ml-8" : "mr-8"
-          )}
-        >
-          <CardContent className="pt-4">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-                <Badge
-                  variant={msg.direction === "inbound" ? "default" : "secondary"}
-                  className="text-xs"
-                >
-                  {msg.direction === "inbound" ? "Received" : "Sent"}
-                </Badge>
-                {msg.handoff_status && (
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {msg.handoff_status}
-                  </Badge>
-                )}
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {new Date(msg.timestamp).toLocaleString()}
-              </span>
-            </div>
-            <p className="mb-1 text-sm font-medium">{msg.subject}</p>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-              {msg.body}
-            </p>
-          </CardContent>
-        </Card>
-      ))}
     </div>
   );
 }

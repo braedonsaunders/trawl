@@ -3,6 +3,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, Output, type LanguageModel } from "ai";
 import {
+  clearProviderOAuthTokens,
   getProviderSetting,
   saveProviderSetting,
   type ProviderId,
@@ -55,6 +56,13 @@ function hasStoredOAuthToken(config: ProviderSettingRecord): boolean {
   return Boolean(config.oauth_access_token.trim());
 }
 
+function isInvalidGrantError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /invalid_grant|refresh token not found or invalid/i.test(error.message)
+  );
+}
+
 async function refreshStoredProviderToken(
   config: ProviderSettingRecord
 ): Promise<ProviderSettingRecord> {
@@ -62,36 +70,44 @@ async function refreshStoredProviderToken(
     return config;
   }
 
-  if (config.provider === "openai") {
-    const tokens = await refreshOpenAIToken(config.oauth_refresh_token);
+  try {
+    if (config.provider === "openai") {
+      const tokens = await refreshOpenAIToken(config.oauth_refresh_token);
+
+      return saveProviderSetting({
+        ...config,
+        provider: "openai",
+        auth_mode: "oauth",
+        oauth_access_token: tokens.access_token,
+        oauth_refresh_token: tokens.refresh_token ?? config.oauth_refresh_token,
+        oauth_id_token: tokens.id_token ?? config.oauth_id_token,
+        oauth_token_type: tokens.token_type ?? config.oauth_token_type,
+        oauth_expires_at: buildExpiresAt(tokens.expires_in),
+        oauth_connected_at:
+          config.oauth_connected_at ?? new Date().toISOString(),
+      });
+    }
+
+    const tokens = await refreshAnthropicToken(config.oauth_refresh_token);
 
     return saveProviderSetting({
       ...config,
-      provider: "openai",
+      provider: "anthropic",
       auth_mode: "oauth",
       oauth_access_token: tokens.access_token,
       oauth_refresh_token: tokens.refresh_token ?? config.oauth_refresh_token,
-      oauth_id_token: tokens.id_token ?? config.oauth_id_token,
       oauth_token_type: tokens.token_type ?? config.oauth_token_type,
-      oauth_expires_at: buildExpiresAt(tokens.expires_in),
-      oauth_connected_at:
-        config.oauth_connected_at ?? new Date().toISOString(),
+      oauth_expires_at:
+        buildExpiresAt(tokens.expires_in) ?? config.oauth_expires_at,
+      oauth_connected_at: config.oauth_connected_at ?? new Date().toISOString(),
     });
+  } catch (error) {
+    if (isInvalidGrantError(error)) {
+      clearProviderOAuthTokens(config.provider);
+    }
+
+    throw error;
   }
-
-  const tokens = await refreshAnthropicToken(config.oauth_refresh_token);
-
-  return saveProviderSetting({
-    ...config,
-    provider: "anthropic",
-    auth_mode: "oauth",
-    oauth_access_token: tokens.access_token,
-    oauth_refresh_token: tokens.refresh_token ?? config.oauth_refresh_token,
-    oauth_token_type: tokens.token_type ?? config.oauth_token_type,
-    oauth_expires_at:
-      buildExpiresAt(tokens.expires_in) ?? config.oauth_expires_at,
-    oauth_connected_at: config.oauth_connected_at ?? new Date().toISOString(),
-  });
 }
 
 async function getProviderConfigForUse(

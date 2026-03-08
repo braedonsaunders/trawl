@@ -4,11 +4,13 @@ import {
   upsertEnrichment,
   type Enrichment,
 } from "@/lib/db/queries/enrichments";
+import { mergeLeadContact } from "@/lib/db/queries/lead-contacts";
 import type { Lead } from "@/lib/db/queries/leads";
 import { deleteScore, upsertScore, type Score } from "@/lib/db/queries/scores";
 import { getSetting } from "@/lib/db/queries/settings";
 import { callLLM } from "@/lib/llm/client";
 import { buildEnrichmentPrompt } from "@/lib/llm/prompts/enrich";
+import type { PotentialContact } from "@/lib/llm/types";
 import {
   buildScoringPrompt,
   type CompanyProfile,
@@ -104,6 +106,74 @@ function normalizeCompanyProfile(company: Company): CompanyProfile {
     services: parseJsonStringArray(company.services),
     description: company.description || "",
   };
+}
+
+function normalizeContactSource(value: string | undefined): {
+  source_label: string;
+  source_url?: string;
+} {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return {
+      source_label: "Website enrichment",
+    };
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return {
+      source_label: "Website enrichment",
+      source_url: trimmed,
+    };
+  }
+
+  return {
+    source_label: trimmed,
+  };
+}
+
+function hasContactContent(contact: PotentialContact): boolean {
+  return Boolean(
+    contact.name?.trim() ||
+      contact.title?.trim() ||
+      contact.email?.trim() ||
+      contact.phone?.trim() ||
+      contact.linkedin_url?.trim()
+  );
+}
+
+function syncEnrichmentContacts(
+  leadId: number,
+  contacts: PotentialContact[],
+  runTracker?: AgentRunTracker | null
+): number {
+  const candidates = contacts.filter(hasContactContent);
+
+  for (const contact of candidates) {
+    const source = normalizeContactSource(contact.source);
+    mergeLeadContact(leadId, {
+      name: contact.name,
+      title: contact.title,
+      email: contact.email,
+      phone: contact.phone,
+      linkedin_url: contact.linkedin_url,
+      source_type: "enrichment",
+      source_label: source.source_label,
+      source_url: source.source_url,
+      notes: "Imported from enrichment.",
+      confidence: contact.confidence ?? null,
+      status: "suggested",
+    });
+  }
+
+  if (candidates.length > 0) {
+    runTracker?.success("Saved enrichment contacts to directory", {
+      stage: "enrichment",
+      detail: `${candidates.length} contact suggestion${candidates.length === 1 ? "" : "s"}`,
+    });
+  }
+
+  return candidates.length;
 }
 
 function buildFallbackContent(lead: Lead): string {
@@ -267,6 +337,12 @@ export async function enrichLead(
     firmographics.employee_count?.source_name ??
     null;
 
+  syncEnrichmentContacts(
+    lead.id,
+    enrichmentData.potential_contacts || [],
+    runTracker
+  );
+
   const enrichment = upsertEnrichment(lead.id, {
     website_summary: enrichmentData.website_summary,
     industry: enrichmentData.industry,
@@ -281,7 +357,7 @@ export async function enrichLead(
     pain_points: enrichmentData.pain_points,
     tech_stack: JSON.stringify(enrichmentData.tech_stack || []),
     social_links: JSON.stringify(enrichmentData.social_links || {}),
-    potential_contacts: JSON.stringify(enrichmentData.potential_contacts || []),
+    potential_contacts: null,
     screenshots: JSON.stringify(screenshots),
     raw_content: rawContent.slice(0, 50000),
     enriched_at: new Date().toISOString(),

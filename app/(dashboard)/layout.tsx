@@ -8,7 +8,6 @@ import {
   Search,
   Users,
   Mail,
-  Inbox,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,7 +18,6 @@ const navItems = [
   { label: "Discover", href: "/discover", icon: Search },
   { label: "Leads", href: "/leads", icon: Users },
   { label: "Outreach", href: "/outreach", icon: Mail },
-  { label: "Inbox", href: "/inbox", icon: Inbox },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

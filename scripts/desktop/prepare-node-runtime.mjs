@@ -16,16 +16,56 @@ const outputPath = path.join(
 const version = process.version.replace(/^v/, "");
 const supportedTargets = {
   "darwin-arm64": {
-    archiveExt: "tar.gz",
     archiveName: `node-v${version}-darwin-arm64.tar.gz`,
     extractedDir: `node-v${version}-darwin-arm64`,
     binaryPath: ["bin", "node"],
+    extract: {
+      kind: "tar",
+      args: ["-xzf"],
+    },
   },
   "darwin-x64": {
-    archiveExt: "tar.gz",
     archiveName: `node-v${version}-darwin-x64.tar.gz`,
     extractedDir: `node-v${version}-darwin-x64`,
     binaryPath: ["bin", "node"],
+    extract: {
+      kind: "tar",
+      args: ["-xzf"],
+    },
+  },
+  "linux-arm64": {
+    archiveName: `node-v${version}-linux-arm64.tar.xz`,
+    extractedDir: `node-v${version}-linux-arm64`,
+    binaryPath: ["bin", "node"],
+    extract: {
+      kind: "tar",
+      args: ["-xJf"],
+    },
+  },
+  "linux-x64": {
+    archiveName: `node-v${version}-linux-x64.tar.xz`,
+    extractedDir: `node-v${version}-linux-x64`,
+    binaryPath: ["bin", "node"],
+    extract: {
+      kind: "tar",
+      args: ["-xJf"],
+    },
+  },
+  "win32-arm64": {
+    archiveName: `node-v${version}-win-arm64.zip`,
+    extractedDir: `node-v${version}-win-arm64`,
+    binaryPath: ["node.exe"],
+    extract: {
+      kind: "zip",
+    },
+  },
+  "win32-x64": {
+    archiveName: `node-v${version}-win-x64.zip`,
+    extractedDir: `node-v${version}-win-x64`,
+    binaryPath: ["node.exe"],
+    extract: {
+      kind: "zip",
+    },
   },
 };
 const targetKey = `${process.platform}-${process.arch}`;
@@ -52,6 +92,31 @@ function run(command, args) {
   if (result.error) {
     throw result.error;
   }
+}
+
+function escapePowerShellString(value) {
+  return value.replace(/'/g, "''");
+}
+
+function extractArchive(archivePath, destination) {
+  if (target.extract.kind === "tar") {
+    run("tar", [...target.extract.args, archivePath, "-C", destination]);
+    return;
+  }
+
+  if (target.extract.kind === "zip") {
+    run("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `Expand-Archive -LiteralPath '${escapePowerShellString(
+        archivePath
+      )}' -DestinationPath '${escapePowerShellString(destination)}' -Force`,
+    ]);
+    return;
+  }
+
+  throw new Error(`Unsupported archive extractor for ${targetKey}`);
 }
 
 async function downloadArchive(url, destination) {
@@ -89,7 +154,7 @@ fs.rmSync(cacheDir, { recursive: true, force: true });
 fs.mkdirSync(cacheDir, { recursive: true });
 
 await downloadArchive(url, archivePath);
-run("tar", ["-xzf", archivePath, "-C", cacheDir]);
+extractArchive(archivePath, cacheDir);
 
 fs.copyFileSync(path.join(extractDir, ...target.binaryPath), outputPath);
 
