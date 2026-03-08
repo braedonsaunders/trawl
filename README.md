@@ -31,17 +31,6 @@ No hosted CRM maze. No browser-tab archaeology. No lead spreadsheet that dies th
 - Built for action. Discovery, enrichment, scoring, and draft creation live in one pipeline.
 - Human-close friendly. AI does the heavy prep; humans step in when judgment matters.
 
-## What It Does
-
-```mermaid
-flowchart LR
-  A["Search a town or region"] --> B["Pull businesses into Trawl"]
-  B --> C["Crawl company websites"]
-  C --> D["Extract signals with AI"]
-  D --> E["Score fit"]
-  E --> F["Generate outreach drafts"]
-  F --> G["Hand the best conversations to a human"]
-```
 
 ### Core loop
 
