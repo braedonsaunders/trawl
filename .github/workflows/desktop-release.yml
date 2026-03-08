@@ -89,7 +89,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.label }}
-          path: dist-electron/**/*
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+            dist-electron/*.AppImage
+            dist-electron/*Setup*.exe
           if-no-files-found: error
 
   publish:
@@ -115,15 +119,15 @@ jobs:
           - Built: ${{ needs.prepare.outputs.release_date }}
           - Platforms: macOS, Windows, Linux
 
-          Installers and metadata are attached below.
+          Desktop installers are attached below.
           EOF
 
       - name: Generate checksums
         shell: bash
         run: |
           find release-assets -type f \
-            \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.7z' -o -name '*.blockmap' -o -name 'latest*.yml' \) \
-            -print > asset-list.txt
+            \( -name '*.dmg' -o -name '*.zip' -o -name '*.AppImage' -o -name '*Setup*.exe' \) \
+            -print | sort > asset-list.txt
 
           if [ ! -s asset-list.txt ]; then
             echo "No release assets found." >&2
