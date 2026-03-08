@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runPnpm } from "./run-pnpm.mjs";
 
 const rootDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -8,13 +8,11 @@ const rootDir = path.resolve(
   ".."
 );
 const browsersPath = path.join(rootDir, ".playwright-browsers");
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
-const result = spawnSync(pnpmCommand, ["exec", "playwright", "install", "chromium"], {
+const result = runPnpm(["exec", "playwright", "install", "chromium"], {
   cwd: rootDir,
   stdio: "inherit",
   env: {
-    ...process.env,
     PLAYWRIGHT_BROWSERS_PATH: browsersPath,
   },
 });

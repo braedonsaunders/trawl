@@ -1,22 +1,17 @@
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runPnpm } from "./run-pnpm.mjs";
 
 const rootDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   ".."
 );
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-
 function run(args, extraEnv = {}) {
-  const result = spawnSync(pnpmCommand, args, {
+  const result = runPnpm(args, {
     cwd: rootDir,
     stdio: "inherit",
-    env: {
-      ...process.env,
-      ...extraEnv,
-    },
+    env: extraEnv,
   });
 
   if (typeof result.status === "number" && result.status !== 0) {
