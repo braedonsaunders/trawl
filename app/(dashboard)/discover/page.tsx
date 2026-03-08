@@ -458,7 +458,7 @@ export default function DiscoverPage() {
                     <Input
                       value={town}
                       onChange={(event) => setTown(event.target.value)}
-                      placeholder="Simcoe, Ontario"
+                      placeholder="Toronto"
                       className="h-11 pl-10"
                     />
                   </div>
