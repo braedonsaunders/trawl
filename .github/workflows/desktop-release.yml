@@ -137,6 +137,7 @@ jobs:
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           assets=()
@@ -149,4 +150,5 @@ jobs:
             "${assets[@]}" \
             --title "${{ needs.prepare.outputs.release_name }}" \
             --notes-file release-notes.md \
+            --target "${{ needs.prepare.outputs.commit_sha }}" \
             --latest
