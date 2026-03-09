@@ -1,6 +1,6 @@
 {
   "name": "trawl",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local-first desktop app for B2B lead discovery, enrichment, scoring, and outreach draft generation.",
   "private": true,
   "main": "electron/main.cjs",
@@ -50,7 +50,11 @@
   "build": {
     "appId": "com.trawl.desktop",
     "productName": "Trawl",
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      ".next/server/**/*.node",
+      "node_modules/**/*.node"
+    ],
     "npmRebuild": false,
     "directories": {
       "output": "dist-electron"
@@ -87,7 +91,14 @@
       "category": "Office"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "Trawl-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
     }
   },
   "pnpm": {
