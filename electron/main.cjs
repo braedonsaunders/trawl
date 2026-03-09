@@ -36,6 +36,16 @@ function getBundledNodePath() {
   );
 }
 
+function getPackagedNodeFallback() {
+  return {
+    command: process.execPath,
+    commandArgs: [],
+    env: {
+      ELECTRON_RUN_AS_NODE: "1",
+    },
+  };
+}
+
 function canUseLocalPlaywrightBrowsers() {
   return fs.existsSync(getPlaywrightBrowsersPath());
 }
@@ -57,15 +67,15 @@ function getNodeCommand() {
   }
 
   const bundledNode = getBundledNodePath();
-  if (!fs.existsSync(bundledNode)) {
-    throw new Error(`Bundled Node runtime not found at ${bundledNode}`);
+  if (fs.existsSync(bundledNode)) {
+    return {
+      command: bundledNode,
+      commandArgs: [],
+      env: {},
+    };
   }
 
-  return {
-    command: bundledNode,
-    commandArgs: [],
-    env: {},
-  };
+  return getPackagedNodeFallback();
 }
 
 function stopServer() {
