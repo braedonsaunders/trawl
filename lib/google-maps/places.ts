@@ -1,7 +1,10 @@
 import { getConfig } from "@/lib/config";
 
 const PLACES_API_BASE = "https://places.googleapis.com/v1/places";
-const GEOCODING_API_BASE = "https://maps.googleapis.com/maps/api/geocode/json";
+const GEOCODE_FIELD_MASK = [
+  "places.formattedAddress",
+  "places.location",
+].join(",");
 
 const SEARCH_FIELD_MASK = [
   "places.id",
@@ -80,20 +83,6 @@ interface PlaceLocation {
   longitude: number;
 }
 
-interface GeocodeResponse {
-  status?: string;
-  error_message?: string;
-  results?: Array<{
-    formatted_address?: string;
-    geometry?: {
-      location?: {
-        lat?: number;
-        lng?: number;
-      };
-    };
-  }>;
-}
-
 interface PlaceApiResult {
   id: string;
   displayName?: { text: string; languageCode?: string };
@@ -170,37 +159,39 @@ export async function geocodePlace(query: string): Promise<GeocodedLocation> {
     throw new Error("Google Maps API key is not configured in settings");
   }
 
-  const url = new URL(GEOCODING_API_BASE);
-  url.searchParams.set("address", query);
-  url.searchParams.set("key", config.googleMapsApiKey);
+  const response = await fetch(`${PLACES_API_BASE}:searchText`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": config.googleMapsApiKey,
+      "X-Goog-FieldMask": GEOCODE_FIELD_MASK,
+    },
+    body: JSON.stringify({
+      textQuery: query,
+      pageSize: 1,
+    }),
+  });
 
-  const response = await fetch(url);
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(`Geocoding failed (${response.status}): ${errorBody}`);
+    throw new Error(
+      `Unable to resolve town "${query}" via Places API (${response.status}): ${errorBody}`
+    );
   }
 
-  const data = (await response.json()) as GeocodeResponse;
-  const result = data.results?.[0];
-  const lat = result?.geometry?.location?.lat;
-  const lng = result?.geometry?.location?.lng;
+  const data = (await response.json()) as {
+    places?: PlaceApiResult[];
+  };
+  const result = data.places?.[0];
+  const lat = result?.location?.latitude;
+  const lng = result?.location?.longitude;
 
-  if (
-    data.status !== "OK" ||
-    !result ||
-    typeof lat !== "number" ||
-    typeof lng !== "number"
-  ) {
-    const detail = data.error_message
-      ? ` ${data.error_message}`
-      : data.status
-        ? ` ${data.status}`
-        : "";
-    throw new Error(`Unable to resolve town "${query}".${detail}`.trim());
+  if (!result || typeof lat !== "number" || typeof lng !== "number") {
+    throw new Error(`Unable to resolve town "${query}".`);
   }
 
   return {
-    formattedAddress: result.formatted_address || query,
+    formattedAddress: result.formattedAddress || query,
     location: {
       latitude: lat,
       longitude: lng,
