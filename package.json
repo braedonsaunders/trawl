@@ -1,6 +1,6 @@
 {
   "name": "trawl",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Local-first desktop app for B2B lead discovery, enrichment, scoring, and outreach draft generation.",
   "private": true,
   "main": "electron/main.cjs",
@@ -50,11 +50,7 @@
   "build": {
     "appId": "com.trawl.desktop",
     "productName": "Trawl",
-    "asar": true,
-    "asarUnpack": [
-      ".next/server/**/*.node",
-      "node_modules/**/*.node"
-    ],
+    "asar": false,
     "npmRebuild": false,
     "directories": {
       "output": "dist-electron"
