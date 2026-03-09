@@ -178,6 +178,16 @@ function pipeServerLogs() {
   });
 }
 
+function formatStartupError(error, command) {
+  const details = [
+    `Command: ${command.command}`,
+    error.code ? `Code: ${error.code}` : null,
+    error.message ? `Message: ${error.message}` : null,
+  ].filter(Boolean);
+
+  return `Failed to launch the local Next.js server.\n\n${details.join("\n")}`;
+}
+
 async function startServer() {
   const port = await findAvailablePort(
     Number.parseInt(process.env.TRAWL_DESKTOP_PORT || "", 10) || DEFAULT_SERVER_PORT
@@ -185,10 +195,8 @@ async function startServer() {
   serverOrigin = `http://${SERVER_HOST}:${port}`;
 
   const nextArgs = [getNextBin(), app.isPackaged ? "start" : "dev", "-p", String(port), "-H", SERVER_HOST];
-  const nodeCommand = getNodeCommand();
-  const env = {
+  const baseEnv = {
     ...process.env,
-    ...nodeCommand.env,
     HOSTNAME: SERVER_HOST,
     NODE_ENV: app.isPackaged ? "production" : "development",
     PORT: String(port),
@@ -198,47 +206,66 @@ async function startServer() {
   };
 
   if (canUseLocalPlaywrightBrowsers()) {
-    env.PLAYWRIGHT_BROWSERS_PATH = getPlaywrightBrowsersPath();
+    baseEnv.PLAYWRIGHT_BROWSERS_PATH = getPlaywrightBrowsersPath();
   }
 
-  serverProcess = spawn(nodeCommand.command, [...nodeCommand.commandArgs, ...nextArgs], {
-    cwd: getAppRoot(),
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const primaryCommand = getNodeCommand();
+  let retriedWithFallback = false;
 
-  pipeServerLogs();
+  const launchServer = (nodeCommand) => {
+    const child = spawn(nodeCommand.command, [...nodeCommand.commandArgs, ...nextArgs], {
+      cwd: getAppRoot(),
+      env: {
+        ...baseEnv,
+        ...nodeCommand.env,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
-  serverProcess.once("error", (error) => {
-    if (isQuitting) {
-      return;
-    }
+    serverProcess = child;
+    pipeServerLogs();
 
-    void dialog.showErrorBox(
-      "Unable to start Trawl",
-      `Failed to launch the local Next.js server.\n\n${error.message}`
-    );
-    app.quit();
-  });
+    child.once("error", (error) => {
+      if (isQuitting || serverProcess !== child) {
+        return;
+      }
 
-  serverProcess.once("exit", (code, signal) => {
-    if (isQuitting) {
-      return;
-    }
+      if (
+        app.isPackaged &&
+        !retriedWithFallback &&
+        nodeCommand.command !== process.execPath &&
+        error.code === "ENOENT"
+      ) {
+        retriedWithFallback = true;
+        launchServer(getPackagedNodeFallback());
+        return;
+      }
 
-    const reason =
-      signal != null
-        ? `signal ${signal}`
-        : code != null
-          ? `exit code ${code}`
-          : "an unknown reason";
+      void dialog.showErrorBox("Unable to start Trawl", formatStartupError(error, nodeCommand));
+      app.quit();
+    });
 
-    void dialog.showErrorBox(
-      "Trawl stopped",
-      `The local Next.js server stopped unexpectedly (${reason}).`
-    );
-    app.quit();
-  });
+    child.once("exit", (code, signal) => {
+      if (isQuitting || serverProcess !== child) {
+        return;
+      }
+
+      const reason =
+        signal != null
+          ? `signal ${signal}`
+          : code != null
+            ? `exit code ${code}`
+            : "an unknown reason";
+
+      void dialog.showErrorBox(
+        "Trawl stopped",
+        `The local Next.js server stopped unexpectedly (${reason}).`
+      );
+      app.quit();
+    });
+  };
+
+  launchServer(primaryCommand);
 
   await waitForServer(serverOrigin);
 }
