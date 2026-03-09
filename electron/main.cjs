@@ -23,7 +23,13 @@ function getDataRoot() {
 }
 
 function getServerWorkingDir() {
-  return app.isPackaged ? process.resourcesPath : getAppRoot();
+  const appRoot = getAppRoot();
+
+  try {
+    return fs.statSync(appRoot).isDirectory() ? appRoot : path.dirname(appRoot);
+  } catch {
+    return app.isPackaged ? process.resourcesPath : appRoot;
+  }
 }
 
 function getPlaywrightBrowsersPath() {
