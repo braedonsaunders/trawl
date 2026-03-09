@@ -22,6 +22,10 @@ function getDataRoot() {
   return app.isPackaged ? app.getPath("userData") : getAppRoot();
 }
 
+function getServerWorkingDir() {
+  return app.isPackaged ? process.resourcesPath : getAppRoot();
+}
+
 function getPlaywrightBrowsersPath() {
   return app.isPackaged
     ? path.join(process.resourcesPath, ".playwright-browsers")
@@ -214,7 +218,7 @@ async function startServer() {
 
   const launchServer = (nodeCommand) => {
     const child = spawn(nodeCommand.command, [...nodeCommand.commandArgs, ...nextArgs], {
-      cwd: getAppRoot(),
+      cwd: getServerWorkingDir(),
       env: {
         ...baseEnv,
         ...nodeCommand.env,
