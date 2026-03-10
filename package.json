@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "desktop:sync-node-native": "node scripts/desktop/ensure-node-native-deps.mjs",
+    "desktop:icons": "node scripts/desktop/generate-icons.mjs",
     "desktop:dev": "node scripts/desktop/dev.mjs",
     "desktop:install-playwright": "node scripts/desktop/install-playwright.mjs",
     "desktop:prepare-node-runtime": "node scripts/desktop/prepare-node-runtime.mjs",
@@ -50,6 +51,7 @@
   "build": {
     "appId": "com.trawl.desktop",
     "productName": "Trawl",
+    "icon": "build/icon.png",
     "asar": false,
     "npmRebuild": false,
     "directories": {
@@ -80,14 +82,17 @@
       }
     ],
     "mac": {
+      "icon": "build/icon.icns",
       "category": "public.app-category.business"
     },
     "linux": {
       "target": "AppImage",
+      "icon": "build/icon.png",
       "category": "Office"
     },
     "win": {
       "target": "nsis",
+      "icon": "build/icon.ico",
       "artifactName": "Trawl-Setup-${version}.${ext}"
     },
     "nsis": {

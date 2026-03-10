@@ -27,6 +27,7 @@ function run(args) {
 run(["run", "desktop:sync-node-native"]);
 run(["run", "desktop:install-playwright"]);
 run(["run", "desktop:prepare-node-runtime"]);
+run(["run", "desktop:icons"]);
 run(["build"]);
 
 try {
