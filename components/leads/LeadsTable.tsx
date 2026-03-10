@@ -15,11 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ScoreBadge } from "@/components/leads/ScoreBadge";
 import { Badge } from "@/components/ui/badge";
+import { LEAD_STATUS_OPTIONS, formatLeadStatus } from "@/lib/leads/status";
 import {
   Search,
-  Mail,
-  Sparkles,
-  BarChart3,
   XCircle,
   ChevronUp,
   ChevronDown,
@@ -28,6 +26,7 @@ import {
   Globe,
   ExternalLink,
   Loader2,
+  Trash2,
 } from "lucide-react";
 
 interface Lead {
@@ -64,16 +63,7 @@ type SortField =
   | "last_activity";
 type SortDir = "asc" | "desc";
 
-const STATUS_OPTIONS = [
-  { label: "All Statuses", value: "" },
-  { label: "Discovered", value: "discovered" },
-  { label: "Enriched", value: "enriched" },
-  { label: "Scored", value: "scored" },
-  { label: "Contacted", value: "contacted" },
-  { label: "Replied", value: "replied" },
-  { label: "Handed Off", value: "handed_off" },
-  { label: "Disqualified", value: "disqualified" },
-];
+const STATUS_OPTIONS = [{ label: "All Statuses", value: "" }, ...LEAD_STATUS_OPTIONS];
 
 const TIER_OPTIONS = [
   { label: "All Tiers", value: "" },
@@ -104,6 +94,7 @@ export function LeadsTable() {
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState<string | null>(null);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -184,11 +175,19 @@ export function LeadsTable() {
     });
   };
 
-  const bulkAction = async (action: string) => {
+  const bulkAction = async (action: "ignore" | "delete") => {
     if (selectedIds.size === 0) return;
 
+    if (
+      action === "delete" &&
+      !window.confirm(`Delete ${selectedIds.size} selected lead${selectedIds.size === 1 ? "" : "s"}? This cannot be undone.`)
+    ) {
+      return;
+    }
+
+    setBulkLoading(action);
     try {
-      await fetch(`/api/leads/bulk`, {
+      const response = await fetch(`/api/leads/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -196,10 +195,17 @@ export function LeadsTable() {
           lead_ids: Array.from(selectedIds),
         }),
       });
+
+      if (!response.ok) {
+        throw new Error("Bulk lead action failed");
+      }
+
       setSelectedIds(new Set());
-      fetchLeads();
-    } catch {
-      // Error handling — could add toast notification
+      await fetchLeads();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk lead action failed");
+    } finally {
+      setBulkLoading(null);
     }
   };
 
@@ -274,34 +280,28 @@ export function LeadsTable() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => bulkAction("enrich")}
+            onClick={() => void bulkAction("ignore")}
+            disabled={bulkLoading !== null}
           >
-            <Sparkles className="h-3.5 w-3.5" />
-            Enrich + Score
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => bulkAction("score")}
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Re-score Selected
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => bulkAction("generate_emails")}
-          >
-            <Mail className="h-3.5 w-3.5" />
-            Generate Emails
+            {bulkLoading === "ignore" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <XCircle className="h-3.5 w-3.5" />
+            )}
+            Ignore
           </Button>
           <Button
             size="sm"
             variant="destructive"
-            onClick={() => bulkAction("disqualify")}
+            onClick={() => void bulkAction("delete")}
+            disabled={bulkLoading !== null}
           >
-            <XCircle className="h-3.5 w-3.5" />
-            Disqualify
+            {bulkLoading === "delete" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            Delete
           </Button>
         </div>
       )}
@@ -389,7 +389,7 @@ export function LeadsTable() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="capitalize">
-                      {lead.status.replace(/_/g, " ")}
+                      {formatLeadStatus(lead.status)}
                     </Badge>
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>

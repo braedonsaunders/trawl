@@ -348,6 +348,41 @@ export function updateLeadStatus(id: number, status: string): void {
   );
 }
 
+export function deleteLead(id: number): void {
+  const db = getDb();
+  const removeLead = db.transaction((leadId: number) => {
+    db.prepare("DELETE FROM conversations WHERE lead_id = ?").run(leadId);
+    db.prepare("DELETE FROM outreach_emails WHERE lead_id = ?").run(leadId);
+    db.prepare("DELETE FROM lead_scores WHERE lead_id = ?").run(leadId);
+    db.prepare("DELETE FROM lead_enrichments WHERE lead_id = ?").run(leadId);
+    db.prepare("UPDATE agent_runs SET lead_id = NULL WHERE lead_id = ?").run(leadId);
+    db.prepare("DELETE FROM leads WHERE id = ?").run(leadId);
+  });
+
+  removeLead(id);
+}
+
+export function deleteLeads(ids: number[]): void {
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (uniqueIds.length === 0) {
+    return;
+  }
+
+  const db = getDb();
+  const removeLeads = db.transaction((leadIds: number[]) => {
+    for (const leadId of leadIds) {
+      db.prepare("DELETE FROM conversations WHERE lead_id = ?").run(leadId);
+      db.prepare("DELETE FROM outreach_emails WHERE lead_id = ?").run(leadId);
+      db.prepare("DELETE FROM lead_scores WHERE lead_id = ?").run(leadId);
+      db.prepare("DELETE FROM lead_enrichments WHERE lead_id = ?").run(leadId);
+      db.prepare("UPDATE agent_runs SET lead_id = NULL WHERE lead_id = ?").run(leadId);
+      db.prepare("DELETE FROM leads WHERE id = ?").run(leadId);
+    }
+  });
+
+  removeLeads(uniqueIds);
+}
+
 export function getLeadsByStatus(status: string): Lead[] {
   const db = getDb();
   return db.prepare("SELECT * FROM leads WHERE status = ? ORDER BY created_at DESC").all(status) as Lead[];

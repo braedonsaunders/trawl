@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getLeadById } from "@/lib/db/queries/leads";
+import {
+  deleteLead,
+  getLeadById,
+  updateLeadStatus,
+} from "@/lib/db/queries/leads";
 import { getEmailsByLeadId } from "@/lib/db/queries/emails";
 import { listLeadContactsByLeadId } from "@/lib/db/queries/lead-contacts";
 import {
@@ -7,6 +11,7 @@ import {
   parseStoredSocialLinks,
   parseStoredStringArray,
 } from "@/lib/leads/format";
+import { formatLeadStatus, isLeadStatus } from "@/lib/leads/status";
 
 interface FirmographicFieldResponse {
   value: string;
@@ -206,6 +211,83 @@ export async function GET(
     console.error("[GET /api/leads/[id]]", error);
     return NextResponse.json(
       { error: "Failed to fetch lead", detail: message },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const leadId = parseInt(id, 10);
+
+    if (isNaN(leadId)) {
+      return NextResponse.json({ error: "Invalid lead ID" }, { status: 400 });
+    }
+
+    const lead = getLeadById(leadId);
+    if (!lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as { status?: string };
+    const status = typeof body.status === "string" ? body.status.trim() : "";
+
+    if (!isLeadStatus(status)) {
+      return NextResponse.json(
+        { error: "Invalid lead status" },
+        { status: 400 }
+      );
+    }
+
+    updateLeadStatus(leadId, status);
+
+    return NextResponse.json({
+      ok: true,
+      id: leadId,
+      status,
+      label: formatLeadStatus(status),
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    console.error("[PATCH /api/leads/[id]]", error);
+    return NextResponse.json(
+      { error: "Failed to update lead", detail: message },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const leadId = parseInt(id, 10);
+
+    if (isNaN(leadId)) {
+      return NextResponse.json({ error: "Invalid lead ID" }, { status: 400 });
+    }
+
+    const lead = getLeadById(leadId);
+    if (!lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    deleteLead(leadId);
+
+    return NextResponse.json({ ok: true, id: leadId });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    console.error("[DELETE /api/leads/[id]]", error);
+    return NextResponse.json(
+      { error: "Failed to delete lead", detail: message },
       { status: 500 }
     );
   }

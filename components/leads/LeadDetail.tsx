@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +16,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ScoreBadge } from "@/components/leads/ScoreBadge";
 import type { SocialLinks } from "@/lib/llm/types";
 import { openMailtoUrls } from "@/lib/email/open-mailto";
+import { LEAD_STATUS_OPTIONS, formatLeadStatus } from "@/lib/leads/status";
 import {
   Globe,
   Phone,
@@ -159,9 +162,14 @@ function getEmailHref(email: string): string {
 }
 
 export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
+  const router = useRouter();
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingStatus, setPendingStatus] = useState("");
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
 
   const fetchLead = useCallback(async () => {
     setLoading(true);
@@ -171,6 +179,7 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
       if (!res.ok) throw new Error("Failed to load lead");
       const data = await res.json();
       setLead(data);
+      setPendingStatus(typeof data.status === "string" ? data.status : "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -210,10 +219,80 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
       Object.keys(lead.social_links).length > 0
   );
   const location = [lead.city, lead.state].filter(Boolean).join(", ");
+  const leadName = lead.name;
   const hasCompanyContactCard = Boolean(lead.website || lead.phone || location);
   const socialEntries = Object.entries(lead.social_links).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string"
   );
+
+  async function saveStatus(nextStatus: string) {
+    setStatusLoading(true);
+    setStatusFeedback(null);
+
+    try {
+      const response = await fetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        label?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to update lead status");
+      }
+
+      setLead((current) =>
+        current ? { ...current, status: nextStatus } : current
+      );
+      setPendingStatus(nextStatus);
+      setStatusFeedback(
+        `Status updated to ${payload.label || formatLeadStatus(nextStatus)}.`
+      );
+    } catch (mutationError) {
+      setStatusFeedback(
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Failed to update lead status"
+      );
+    } finally {
+      setStatusLoading(false);
+    }
+  }
+
+  async function deleteCurrentLead() {
+    if (!window.confirm(`Delete ${leadName}? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeleteLoading(true);
+    setStatusFeedback(null);
+
+    try {
+      const response = await fetch(`/api/leads/${leadId}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to delete lead");
+      }
+
+      router.push("/leads");
+      router.refresh();
+    } catch (mutationError) {
+      setStatusFeedback(
+        mutationError instanceof Error ? mutationError.message : "Failed to delete lead"
+      );
+      setDeleteLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -234,10 +313,61 @@ export function LeadDetail({ leadId, refreshKey = 0 }: LeadDetailProps) {
             )}
           </div>
         </div>
-        <Badge variant="secondary" className="capitalize">
-          {lead.status.replace(/_/g, " ")}
-        </Badge>
+        <div className="flex flex-col items-end gap-3">
+          <Badge variant="secondary" className="capitalize">
+            {formatLeadStatus(lead.status)}
+          </Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Select
+              options={LEAD_STATUS_OPTIONS.map((option) => ({
+                label: option.label,
+                value: option.value,
+              }))}
+              value={pendingStatus}
+              onChange={setPendingStatus}
+              className="w-40"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void saveStatus(pendingStatus)}
+              disabled={statusLoading || deleteLoading || pendingStatus === lead.status}
+            >
+              {statusLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              Save Status
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void saveStatus("ignored")}
+              disabled={statusLoading || deleteLoading || lead.status === "ignored"}
+            >
+              Ignore
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void deleteCurrentLead()}
+              disabled={statusLoading || deleteLoading}
+            >
+              {deleteLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete Lead
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {statusFeedback ? (
+        <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          {statusFeedback}
+        </div>
+      ) : null}
 
       {/* Tabs */}
       <Tabs defaultValue="overview">

@@ -10,6 +10,7 @@ import {
   Mail,
   Settings,
 } from "lucide-react";
+import packageJson from "@/package.json";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -69,7 +70,7 @@ export default function DashboardLayout({
 
         {/* Footer */}
         <div className="border-t border-slate-700 px-6 py-4">
-          <p className="text-xs text-slate-400">Trawl v1.0</p>
+          <p className="text-xs text-slate-400">Trawl v{packageJson.version}</p>
         </div>
       </aside>
 
