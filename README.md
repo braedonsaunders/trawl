@@ -31,6 +31,11 @@ No hosted CRM maze. No browser-tab archaeology. No lead spreadsheet that dies th
 - Built for action. Discovery, enrichment, scoring, and draft creation live in one pipeline.
 - Human-close friendly. AI does the heavy prep; humans step in when judgment matters.
 
+## Who This Is For
+
+- B2B founders who want a private outbound machine instead of another SaaS seat
+- Agencies and service businesses working narrow local markets
+- Operators who want researched leads, not raw exports
 
 ### Core loop
 
@@ -69,18 +74,6 @@ pnpm desktop:dist
 
 That build path packages the desktop app and writes distributables to `dist-electron/`.
 
-## Manual Release Workflow
-
-A manual-only GitHub Actions workflow lives at [`/.github/workflows/desktop-release.yml`](./.github/workflows/desktop-release.yml).
-
-It does three things every time you trigger it from Actions:
-
-1. Builds fresh desktop distributables for macOS, Windows, and Linux.
-2. Collects the generated installers and metadata.
-3. Creates a brand new GitHub release with a unique timestamped tag and attached assets.
-
-There are no push or pull request triggers. Releases only happen when you explicitly click `Run workflow`.
-
 ## Stack
 
 - Electron
@@ -90,13 +83,6 @@ There are no push or pull request triggers. Releases only happen when you explic
 - SQLite via `node:sqlite`
 - Playwright
 - Vercel AI SDK
-
-## Who This Is For
-
-- B2B founders who want a private outbound machine instead of another SaaS seat
-- Agencies and service businesses working narrow local markets
-- Operators who want researched leads, not raw exports
-- Teams that prefer shipping desktop software over maintaining backend infrastructure
 
 ## Repo Notes
 
