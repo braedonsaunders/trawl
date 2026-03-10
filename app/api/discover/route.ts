@@ -188,85 +188,44 @@ const SUPPLIER_QUERY_TOKENS = new Set([
   "providers",
   "contractor",
   "contractors",
-  "mechanical",
-  "electrical",
-  "millwright",
-  "millwrighting",
-  "piping",
-  "duct",
-  "ductwork",
+  "consulting",
+  "consultant",
+  "consultants",
+  "agency",
+  "agencies",
   "installation",
   "installations",
   "maintenance",
-  "shutdown",
-  "shutdowns",
-  "turnaround",
-  "turnarounds",
   "repair",
   "repairs",
-  "automation",
-  "plc",
   "training",
   "certification",
   "certifications",
-  "study",
-  "studies",
-  "emergency",
-  "breakdown",
-  "panel",
-  "panels",
-  "power",
-  "welding",
+  "support",
 ]);
+const AUDIENCE_CLAUSE_PATTERNS = [
+  /\b(?:serve|serves|serving|support|supports|supporting|work(?:s|ing)?\s+with|partner(?:s|ing)?\s+with)\s+([^.;]+)/gi,
+  /\b(?:provide|provides|providing|deliver|delivers|delivering|offer|offers|offering|sell|sells|selling|supply|supplies|supplying)\b[^.;]{0,80}?\b(?:to|for)\s+([^.;]+)/gi,
+  /\b(?:customers|clients|buyers)\s+(?:include|are|such as)\s+([^.;]+)/gi,
+];
 const CUSTOMER_QUERY_PATTERNS = [
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+facilit(?:y|ies))\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+plants?)\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+manufacturers?)\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+processors?)\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+warehouses?)\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+fabricators?)\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+foundr(?:y|ies))\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+refiner(?:y|ies))\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+distribution\s+cent(?:er|re)s?)\b/gi,
-  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+production\s+facilit(?:y|ies))\b/gi,
-];
-const CUSTOMER_QUERY_EXPANSIONS = [
-  {
-    pattern: /\bindustrial facilit(?:y|ies)\b/i,
-    queries: [
-      "manufacturing facility",
-      "industrial facility",
-      "industrial plant",
-      "production facility",
-    ],
-  },
-  {
-    pattern: /\bmanufacturing facilit(?:y|ies)\b/i,
-    queries: ["manufacturing facility", "production facility"],
-  },
-  {
-    pattern: /\bprocessing facilit(?:y|ies)\b/i,
-    queries: ["processing plant", "manufacturing facility"],
-  },
-  {
-    pattern: /\bwarehouses?\b/i,
-    queries: ["warehouse", "distribution center"],
-  },
-];
-const SERVICE_TO_CUSTOMER_QUERY_EXPANSIONS = [
-  {
-    pattern:
-      /\b(millwright(?:ing)?|industrial mechanical|equipment installation|plant maintenance|shutdowns?|turnarounds?|emergency breakdown repair|piping|duct work)\b/i,
-    queries: [
-      "manufacturing facility",
-      "industrial plant",
-      "processing plant",
-    ],
-  },
-  {
-    pattern: /\b(press services|press rebuilds|die setting|press automation)\b/i,
-    queries: ["metal stamping plant", "manufacturing facility"],
-  },
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?facilit(?:y|ies))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?plants?)\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?manufactur(?:er|ers))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?processor(?:s)?)\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?distributor(?:s)?)\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?warehouses?)\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?distribution\s+cent(?:er|re)s?)\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?factor(?:y|ies))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?fabricator(?:s)?)\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?foundr(?:y|ies))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?refiner(?:y|ies))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?mills?)\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?(?:clinics?|hospitals?|laborator(?:y|ies)|labs?))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?(?:schools?|universit(?:y|ies)|colleges?))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?(?:restaurants?|hotels?|resorts?))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?(?:farms?|mines?|quarries))\b/gi,
+  /\b((?:[a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,3}\s+)?(?:dealerships?|dealers?|builders?|developers?|operators?))\b/gi,
 ];
 
 function normalizeText(value: string | null | undefined): string {
@@ -775,6 +734,9 @@ function normalizeCompanyProfile(): DiscoveryCompanyProfile | null {
   const geographies = parseList(company.geographies);
   const differentiators = parseList(company.differentiators);
   const industries = parseList(company.industries_served);
+  const buyerSearchQueries = parseList(company.buyer_search_queries);
+  const buyerTargetSignals = parseList(company.buyer_target_signals);
+  const buyerExclusionSignals = parseList(company.buyer_exclusion_signals);
   const industry = industries[0] || "";
 
   if (!company.name.trim() && !company.description?.trim() && services.length === 0) {
@@ -789,6 +751,10 @@ function normalizeCompanyProfile(): DiscoveryCompanyProfile | null {
     services,
     geographies,
     differentiators,
+    ideal_customer_summary: company.ideal_customer_summary?.trim() || "",
+    buyer_search_queries: buyerSearchQueries,
+    buyer_target_signals: buyerTargetSignals,
+    buyer_exclusion_signals: buyerExclusionSignals,
   };
 }
 
@@ -933,7 +899,7 @@ function isSupplierCentricQuery(
     SUPPLIER_QUERY_TOKENS.has(token)
   ).length;
   const hasFacilityOrBuyerMarker =
-    /\b(facility|plant|manufacturer|processor|warehouse|fabricator|foundry|refinery|distribution center|production facility)\b/.test(
+    /\b(facility|plant|manufacturer|processor|distributor|warehouse|distribution center|factory|fabricator|foundry|refinery|mill|clinic|hospital|laboratory|lab|school|university|college|restaurant|hotel|resort|farm|mine|quarry|dealership|dealer|builder|developer|operator)\b/.test(
       normalized
     );
 
@@ -953,45 +919,83 @@ function collectRegexMatches(text: string, pattern: RegExp): string[] {
   return matches;
 }
 
+function collectAudienceClauses(text: string): string[] {
+  const clauses: string[] = [];
+
+  for (const pattern of AUDIENCE_CLAUSE_PATTERNS) {
+    clauses.push(...collectRegexMatches(text, pattern));
+  }
+
+  return clauses
+    .map((clause) =>
+      clause
+        .replace(/\b(?:such as|including)\b.*$/i, "")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+}
+
+function collectCustomerQueryPhrases(text: string): string[] {
+  return CUSTOMER_QUERY_PATTERNS.flatMap((pattern) =>
+    collectRegexMatches(text, pattern)
+  );
+}
+
+function expandCustomerQueryCandidate(query: string): string[] {
+  const normalizedQuery = singularizeQueryPhrase(query).trim();
+  const expanded = [normalizedQuery];
+
+  if (/\bmanufacturer\b/i.test(normalizedQuery)) {
+    expanded.push(
+      normalizedQuery.replace(/\bmanufacturer\b/i, "manufacturing facility")
+    );
+  }
+
+  if (/\bfactory\b/i.test(normalizedQuery)) {
+    expanded.push(
+      normalizedQuery.replace(/\bfactory\b/i, "manufacturing facility")
+    );
+  }
+
+  if (/\bprocessor\b/i.test(normalizedQuery)) {
+    expanded.push(normalizedQuery.replace(/\bprocessor\b/i, "processing plant"));
+  }
+
+  if (/\bwarehouse\b/i.test(normalizedQuery)) {
+    expanded.push(
+      normalizedQuery.replace(/\bwarehouse\b/i, "distribution center")
+    );
+  }
+
+  if (/\bdistribution center\b/i.test(normalizedQuery)) {
+    expanded.push(normalizedQuery.replace(/\bdistribution center\b/i, "warehouse"));
+  }
+
+  if (/\b(?:industrial|manufacturing|production|processing)\s+facility\b/i.test(normalizedQuery)) {
+    expanded.push(normalizedQuery.replace(/\bfacility\b/i, "plant"));
+  }
+
+  if (/\b(?:industrial|manufacturing|production|processing)\s+plant\b/i.test(normalizedQuery)) {
+    expanded.push(normalizedQuery.replace(/\bplant\b/i, "facility"));
+  }
+
+  return expanded;
+}
+
 function buildCustomerSearchQueries(
   companyProfile: DiscoveryCompanyProfile
 ): string[] {
-  const description = companyProfile.description || "";
-  const expansionText = [
-    description,
-    companyProfile.industry,
-    ...companyProfile.services,
+  const sourceText = [
+    companyProfile.ideal_customer_summary,
+    companyProfile.description,
   ]
     .filter(Boolean)
     .join(". ");
-  const candidates: string[] = [];
-
-  for (const pattern of CUSTOMER_QUERY_PATTERNS) {
-    candidates.push(...collectRegexMatches(description, pattern));
-  }
-
-  for (const rule of CUSTOMER_QUERY_EXPANSIONS) {
-    if (rule.pattern.test(expansionText)) {
-      candidates.push(...rule.queries);
-    }
-  }
-
-  for (const rule of SERVICE_TO_CUSTOMER_QUERY_EXPANSIONS) {
-    if (
-      [companyProfile.industry, ...companyProfile.services]
-        .filter(Boolean)
-        .some((value) => rule.pattern.test(value))
-    ) {
-      candidates.push(...rule.queries);
-    }
-  }
-
-  if (
-    candidates.length === 0 &&
-    /\bindustrial\b/i.test(expansionText)
-  ) {
-    candidates.push("manufacturing facility", "industrial plant");
-  }
+  const audienceClauses = collectAudienceClauses(sourceText);
+  const candidates = [sourceText, ...audienceClauses]
+    .flatMap((value) => collectCustomerQueryPhrases(value))
+    .flatMap((value) => expandCustomerQueryCandidate(value));
 
   return mergeSearchQueries(candidates, [], companyProfile);
 }
@@ -999,23 +1003,31 @@ function buildCustomerSearchQueries(
 function buildFallbackSearchPlan(
   companyProfile: DiscoveryCompanyProfile
 ): SearchPlan {
-  const searchQueries = buildCustomerSearchQueries(companyProfile);
+  const savedSearchQueries = sanitizeSearchQueries(
+    companyProfile.buyer_search_queries,
+    companyProfile
+  );
+  const searchQueries = mergeSearchQueries(
+    savedSearchQueries,
+    buildCustomerSearchQueries(companyProfile),
+    companyProfile
+  );
   const idealCustomerSummary = searchQueries.length
-    ? `Best-fit buyers look like ${searchQueries
+    ? companyProfile.ideal_customer_summary ||
+      `Best-fit buyers look like ${searchQueries
         .slice(0, 3)
         .join(", ")} businesses rather than other trade-service providers.`
     : companyProfile.description ||
       `${companyProfile.name} is targeting businesses that align with its services.`;
 
   return {
-    search_queries:
-      searchQueries.length > 0 ? searchQueries : ["manufacturing facility"],
+    search_queries: searchQueries.length > 0 ? searchQueries : ["local business"],
     ideal_customer_summary: idealCustomerSummary,
     target_signals:
-      searchQueries.length > 0
-        ? searchQueries.slice(0, 4)
-        : companyProfile.services.slice(0, 4),
-    exclusion_signals: ["service contractors", "trade schools", "training providers"],
+      companyProfile.buyer_target_signals.length > 0
+        ? companyProfile.buyer_target_signals
+        : searchQueries.slice(0, 4),
+    exclusion_signals: companyProfile.buyer_exclusion_signals,
   };
 }
 

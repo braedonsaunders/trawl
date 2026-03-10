@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       ...prompt,
       schema: companyProfileResultSchema,
       temperature: 0.2,
-      maxTokens: 1000,
+      maxTokens: 1400,
     });
 
     const fallbackName = new URL(website).hostname.replace(/^www\./i, "");
@@ -56,6 +56,12 @@ export async function POST(request: NextRequest) {
       ),
       geographies: JSON.stringify(profileData.geographies_served || []),
       differentiators: JSON.stringify(profileData.differentiators || []),
+      ideal_customer_summary: profileData.ideal_customer_summary.trim() || null,
+      buyer_search_queries: JSON.stringify(profileData.buyer_search_queries || []),
+      buyer_target_signals: JSON.stringify(profileData.target_signals || []),
+      buyer_exclusion_signals: JSON.stringify(
+        profileData.exclusion_signals || []
+      ),
       screenshots: JSON.stringify(crawlResult.screenshots || []),
       raw_content: crawlResult.allContent.slice(0, 50000),
       last_profiled_at: new Date().toISOString(),

@@ -77,6 +77,8 @@ const EMPTY_SETTINGS: SettingsPayload = {
     description: "",
     industry: "",
     services: "",
+    idealCustomerSummary: "",
+    buyerSearchTerms: "",
   },
   integrations: {
     googleMapsApiKey: "",
@@ -376,6 +378,9 @@ export default function SettingsPage() {
 
       const services = parseList(String(payload.services || ""));
       const industries = parseList(String(payload.industries_served || ""));
+      const buyerSearchTerms = parseList(
+        String(payload.buyer_search_queries || "")
+      );
 
       setSettings((prev) => ({
         ...prev,
@@ -385,6 +390,11 @@ export default function SettingsPage() {
           description: payload.description || prev.companyProfile.description,
           industry: industries[0] || prev.companyProfile.industry,
           services: services.join("\n") || prev.companyProfile.services,
+          idealCustomerSummary:
+            payload.ideal_customer_summary ||
+            prev.companyProfile.idealCustomerSummary,
+          buyerSearchTerms:
+            buyerSearchTerms.join("\n") || prev.companyProfile.buyerSearchTerms,
         },
       }));
       setStatusMessage("Company profile updated.");
@@ -735,6 +745,50 @@ export default function SettingsPage() {
                 placeholder={"One service per line"}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium">
+                Ideal Customer
+              </label>
+              <textarea
+                value={settings.companyProfile.idealCustomerSummary}
+                onChange={(event) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    companyProfile: {
+                      ...prev.companyProfile,
+                      idealCustomerSummary: event.target.value,
+                    },
+                  }))
+                }
+                rows={3}
+                placeholder="Who the profiled business most wants to sell to"
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium">
+                Buyer Search Terms
+              </label>
+              <textarea
+                value={settings.companyProfile.buyerSearchTerms}
+                onChange={(event) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    companyProfile: {
+                      ...prev.companyProfile,
+                      buyerSearchTerms: event.target.value,
+                    },
+                  }))
+                }
+                rows={4}
+                placeholder="One customer-side Google Maps query per line"
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Profile Company uses the LLM to suggest customer-side search
+                terms here. Discovery uses these as seed queries.
+              </p>
             </div>
           </div>
         </div>

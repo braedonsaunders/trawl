@@ -8,6 +8,10 @@ export interface DiscoveryCompanyProfile {
   services: string[];
   geographies: string[];
   differentiators: string[];
+  ideal_customer_summary: string;
+  buyer_search_queries: string[];
+  buyer_target_signals: string[];
+  buyer_exclusion_signals: string[];
 }
 
 export interface DiscoveryCandidate {
@@ -64,6 +68,7 @@ Rules:
 - Return 2-5 distinct search_queries when possible; avoid near-duplicates
 - Each search query must be short and concrete, usually 2-6 words
 - Every search query must name a customer business, facility, operator, or industry segment that could appear on Google Maps
+- If the supplier profile already includes buyer_search_queries, treat them as strong hints and improve or diversify them rather than ignoring them
 - Prefer the business type the supplier most likely sells into, not the supplier's own service label
 - Cover different realistic buyer angles such as facility type, buyer industry, or operation style when the profile supports them
 - Optimize for filtering quality in Google Maps, not marketing language
@@ -71,8 +76,8 @@ Rules:
 - Avoid obvious competitor categories unless they are also realistic buyers
 - Never return the supplier's own services, trades, certifications, job titles, or capability labels
 - If a query could plausibly be the supplier's own services page title, it is wrong
-- Bad query examples: "industrial mechanical services", "mechanical services", "millwrighting", "plant maintenance"
-- Good query examples: "manufacturing facility", "industrial plant", "food processing plant", "steel fabricator"
+- Bad query examples: supplier-side labels like "managed IT services", "roof repair", or "business consulting"
+- Good query examples: customer-side labels like "property management company", "distribution center", or "medical clinic"
 - Keep target and exclusion signals concise and factual
 - Do not include any text outside the JSON object`;
 

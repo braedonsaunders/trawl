@@ -9,6 +9,10 @@ export interface Company {
   industries_served: string | null;
   geographies: string | null;
   differentiators: string | null;
+  ideal_customer_summary: string | null;
+  buyer_search_queries: string | null;
+  buyer_target_signals: string | null;
+  buyer_exclusion_signals: string | null;
   screenshots: string | null;
   raw_content: string | null;
   last_profiled_at: string | null;
@@ -23,6 +27,10 @@ export interface UpsertCompanyData {
   industries_served?: string | null;
   geographies?: string | null;
   differentiators?: string | null;
+  ideal_customer_summary?: string | null;
+  buyer_search_queries?: string | null;
+  buyer_target_signals?: string | null;
+  buyer_exclusion_signals?: string | null;
   screenshots?: string | null;
   raw_content?: string | null;
   last_profiled_at?: string | null;
@@ -49,6 +57,10 @@ export function upsertCompanyProfile(data: UpsertCompanyData): Company {
         industries_served = @industries_served,
         geographies = @geographies,
         differentiators = @differentiators,
+        ideal_customer_summary = @ideal_customer_summary,
+        buyer_search_queries = @buyer_search_queries,
+        buyer_target_signals = @buyer_target_signals,
+        buyer_exclusion_signals = @buyer_exclusion_signals,
         screenshots = @screenshots,
         raw_content = @raw_content,
         last_profiled_at = @last_profiled_at
@@ -62,6 +74,10 @@ export function upsertCompanyProfile(data: UpsertCompanyData): Company {
       industries_served: data.industries_served ?? null,
       geographies: data.geographies ?? null,
       differentiators: data.differentiators ?? null,
+      ideal_customer_summary: data.ideal_customer_summary ?? null,
+      buyer_search_queries: data.buyer_search_queries ?? null,
+      buyer_target_signals: data.buyer_target_signals ?? null,
+      buyer_exclusion_signals: data.buyer_exclusion_signals ?? null,
       screenshots: data.screenshots ?? null,
       raw_content: data.raw_content ?? null,
       last_profiled_at: data.last_profiled_at ?? null,
@@ -71,8 +87,38 @@ export function upsertCompanyProfile(data: UpsertCompanyData): Company {
   }
 
   const stmt = db.prepare(`
-    INSERT INTO companies (name, website, description, services, industries_served, geographies, differentiators, screenshots, raw_content, last_profiled_at)
-    VALUES (@name, @website, @description, @services, @industries_served, @geographies, @differentiators, @screenshots, @raw_content, @last_profiled_at)
+    INSERT INTO companies (
+      name,
+      website,
+      description,
+      services,
+      industries_served,
+      geographies,
+      differentiators,
+      ideal_customer_summary,
+      buyer_search_queries,
+      buyer_target_signals,
+      buyer_exclusion_signals,
+      screenshots,
+      raw_content,
+      last_profiled_at
+    )
+    VALUES (
+      @name,
+      @website,
+      @description,
+      @services,
+      @industries_served,
+      @geographies,
+      @differentiators,
+      @ideal_customer_summary,
+      @buyer_search_queries,
+      @buyer_target_signals,
+      @buyer_exclusion_signals,
+      @screenshots,
+      @raw_content,
+      @last_profiled_at
+    )
     RETURNING *
   `);
 
@@ -84,6 +130,10 @@ export function upsertCompanyProfile(data: UpsertCompanyData): Company {
     industries_served: data.industries_served ?? null,
     geographies: data.geographies ?? null,
     differentiators: data.differentiators ?? null,
+    ideal_customer_summary: data.ideal_customer_summary ?? null,
+    buyer_search_queries: data.buyer_search_queries ?? null,
+    buyer_target_signals: data.buyer_target_signals ?? null,
+    buyer_exclusion_signals: data.buyer_exclusion_signals ?? null,
     screenshots: data.screenshots ?? null,
     raw_content: data.raw_content ?? null,
     last_profiled_at: data.last_profiled_at ?? null,

@@ -22,6 +22,8 @@ export interface CompanyProfileSettings {
   description: string;
   industry: string;
   services: string;
+  idealCustomerSummary: string;
+  buyerSearchTerms: string;
 }
 
 export interface ContactSetting {
@@ -227,6 +229,8 @@ export function getSettingsPayload(): SettingsPayload {
       description: company?.description || "",
       industry: firstListItem(company?.industries_served || null),
       services: listToMultilineString(company?.services || null),
+      idealCustomerSummary: company?.ideal_customer_summary || "",
+      buyerSearchTerms: listToMultilineString(company?.buyer_search_queries || null),
     },
     integrations: {
       googleMapsApiKey: settings.google_maps_api_key || "",
@@ -327,6 +331,13 @@ export function saveSettingsPayload(payload: SettingsPayload): SettingsPayload {
       industries_served: JSON.stringify(
         splitListInput(payload.companyProfile.industry).slice(0, 1)
       ),
+      ideal_customer_summary:
+        payload.companyProfile.idealCustomerSummary || null,
+      buyer_search_queries: JSON.stringify(
+        splitListInput(payload.companyProfile.buyerSearchTerms)
+      ),
+      buyer_target_signals: currentCompany?.buyer_target_signals ?? null,
+      buyer_exclusion_signals: currentCompany?.buyer_exclusion_signals ?? null,
       geographies: currentCompany?.geographies ?? null,
       differentiators: currentCompany?.differentiators ?? null,
       screenshots: currentCompany?.screenshots ?? null,
