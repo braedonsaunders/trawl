@@ -179,6 +179,95 @@ const SHORTLIST_MIN_OUTPUT_TOKENS = 900;
 const SHORTLIST_MAX_OUTPUT_TOKENS = 2400;
 const SHORTLIST_OUTPUT_TOKENS_PER_CANDIDATE = 110;
 const SHORTLIST_ERROR_DETAIL_LIMIT = 180;
+const SUPPLIER_QUERY_TOKENS = new Set([
+  "service",
+  "services",
+  "solution",
+  "solutions",
+  "provider",
+  "providers",
+  "contractor",
+  "contractors",
+  "mechanical",
+  "electrical",
+  "millwright",
+  "millwrighting",
+  "piping",
+  "duct",
+  "ductwork",
+  "installation",
+  "installations",
+  "maintenance",
+  "shutdown",
+  "shutdowns",
+  "turnaround",
+  "turnarounds",
+  "repair",
+  "repairs",
+  "automation",
+  "plc",
+  "training",
+  "certification",
+  "certifications",
+  "study",
+  "studies",
+  "emergency",
+  "breakdown",
+  "panel",
+  "panels",
+  "power",
+  "welding",
+]);
+const CUSTOMER_QUERY_PATTERNS = [
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+facilit(?:y|ies))\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+plants?)\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+manufacturers?)\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+processors?)\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+warehouses?)\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+fabricators?)\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+foundr(?:y|ies))\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+refiner(?:y|ies))\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+distribution\s+cent(?:er|re)s?)\b/gi,
+  /\b([a-z][a-z&/-]*(?:\s+[a-z][a-z&/-]*){0,2}\s+production\s+facilit(?:y|ies))\b/gi,
+];
+const CUSTOMER_QUERY_EXPANSIONS = [
+  {
+    pattern: /\bindustrial facilit(?:y|ies)\b/i,
+    queries: [
+      "manufacturing facility",
+      "industrial facility",
+      "industrial plant",
+      "production facility",
+    ],
+  },
+  {
+    pattern: /\bmanufacturing facilit(?:y|ies)\b/i,
+    queries: ["manufacturing facility", "production facility"],
+  },
+  {
+    pattern: /\bprocessing facilit(?:y|ies)\b/i,
+    queries: ["processing plant", "manufacturing facility"],
+  },
+  {
+    pattern: /\bwarehouses?\b/i,
+    queries: ["warehouse", "distribution center"],
+  },
+];
+const SERVICE_TO_CUSTOMER_QUERY_EXPANSIONS = [
+  {
+    pattern:
+      /\b(millwright(?:ing)?|industrial mechanical|equipment installation|plant maintenance|shutdowns?|turnarounds?|emergency breakdown repair|piping|duct work)\b/i,
+    queries: [
+      "manufacturing facility",
+      "industrial plant",
+      "processing plant",
+    ],
+  },
+  {
+    pattern: /\b(press services|press rebuilds|die setting|press automation)\b/i,
+    queries: ["metal stamping plant", "manufacturing facility"],
+  },
+];
 
 function normalizeText(value: string | null | undefined): string {
   return (value || "")
@@ -767,101 +856,227 @@ function distanceKm(
   );
 }
 
+function tokenizeNormalized(value: string): string[] {
+  return normalizeText(value).split(" ").filter(Boolean);
+}
+
+function singularizeQueryPhrase(value: string): string {
+  return value
+    .replace(/\bfacilities\b/gi, "facility")
+    .replace(/\bplants\b/gi, "plant")
+    .replace(/\bmanufacturers\b/gi, "manufacturer")
+    .replace(/\bprocessors\b/gi, "processor")
+    .replace(/\bwarehouses\b/gi, "warehouse")
+    .replace(/\bfabricators\b/gi, "fabricator")
+    .replace(/\bfoundries\b/gi, "foundry")
+    .replace(/\brefineries\b/gi, "refinery")
+    .replace(/\bcentres\b/gi, "center")
+    .replace(/\bcenters\b/gi, "center");
+}
+
+function normalizeQueryCandidate(value: string): string {
+  return truncate(
+    singularizeQueryPhrase(value)
+      .replace(/[()]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+    60
+  );
+}
+
+function queryTokensAreSubsetOfPhrase(query: string, phrase: string): boolean {
+  const queryTokens = new Set(tokenizeNormalized(query));
+  const phraseTokens = new Set(tokenizeNormalized(phrase));
+
+  if (queryTokens.size === 0 || phraseTokens.size === 0) {
+    return false;
+  }
+
+  for (const token of queryTokens) {
+    if (!phraseTokens.has(token)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isSupplierCentricQuery(
+  query: string,
+  companyProfile: DiscoveryCompanyProfile
+): boolean {
+  const normalized = normalizeText(query);
+  const tokens = normalized.split(" ").filter(Boolean);
+
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const supplierPhrases = [
+    companyProfile.name,
+    companyProfile.industry,
+    ...companyProfile.services,
+    ...companyProfile.differentiators,
+  ].filter(Boolean);
+
+  if (
+    supplierPhrases.some((phrase) => queryTokensAreSubsetOfPhrase(normalized, phrase))
+  ) {
+    return true;
+  }
+
+  if (/\b(service|services|solution|solutions|provider|providers)\b/.test(normalized)) {
+    return true;
+  }
+
+  const supplierTokenCount = tokens.filter((token) =>
+    SUPPLIER_QUERY_TOKENS.has(token)
+  ).length;
+  const hasFacilityOrBuyerMarker =
+    /\b(facility|plant|manufacturer|processor|warehouse|fabricator|foundry|refinery|distribution center|production facility)\b/.test(
+      normalized
+    );
+
+  return supplierTokenCount > 0 && !hasFacilityOrBuyerMarker;
+}
+
+function collectRegexMatches(text: string, pattern: RegExp): string[] {
+  const matches: string[] = [];
+  const matcher = new RegExp(pattern.source, pattern.flags);
+
+  for (const match of text.matchAll(matcher)) {
+    const value = match[1]?.trim();
+    if (value) {
+      matches.push(value);
+    }
+  }
+  return matches;
+}
+
+function buildCustomerSearchQueries(
+  companyProfile: DiscoveryCompanyProfile
+): string[] {
+  const description = companyProfile.description || "";
+  const expansionText = [
+    description,
+    companyProfile.industry,
+    ...companyProfile.services,
+  ]
+    .filter(Boolean)
+    .join(". ");
+  const candidates: string[] = [];
+
+  for (const pattern of CUSTOMER_QUERY_PATTERNS) {
+    candidates.push(...collectRegexMatches(description, pattern));
+  }
+
+  for (const rule of CUSTOMER_QUERY_EXPANSIONS) {
+    if (rule.pattern.test(expansionText)) {
+      candidates.push(...rule.queries);
+    }
+  }
+
+  for (const rule of SERVICE_TO_CUSTOMER_QUERY_EXPANSIONS) {
+    if (
+      [companyProfile.industry, ...companyProfile.services]
+        .filter(Boolean)
+        .some((value) => rule.pattern.test(value))
+    ) {
+      candidates.push(...rule.queries);
+    }
+  }
+
+  if (
+    candidates.length === 0 &&
+    /\bindustrial\b/i.test(expansionText)
+  ) {
+    candidates.push("manufacturing facility", "industrial plant");
+  }
+
+  return mergeSearchQueries(candidates, [], companyProfile);
+}
+
 function buildFallbackSearchPlan(
   companyProfile: DiscoveryCompanyProfile
 ): SearchPlan {
-  const rawCandidates = [
-    ...companyProfile.services,
-    companyProfile.industry,
-    ...companyProfile.differentiators,
-    ...companyProfile.description
-      .split(/[.;]|\band\b/)
-      .map((entry) => entry.trim()),
-    companyProfile.name,
-  ];
-  const stopPhrases = [
-    "solutions",
-    "service",
-    "services",
-    "provider",
-    "manufacturing",
-    "manufacturer",
-    "industrial",
-    "company",
-    "business",
-  ];
-  const queryCandidates = rawCandidates
-    .map((value) => value.replace(/[()]/g, " ").replace(/\s+/g, " ").trim())
-    .filter(Boolean)
-    .flatMap((value) => {
-      const normalized = value.toLowerCase();
-      const queries = [value];
-      for (const phrase of stopPhrases) {
-        if (normalized.includes(phrase)) {
-          const stripped = value
-            .replace(new RegExp(`\\b${phrase}\\b`, "ig"), " ")
-            .replace(/\s+/g, " ")
-            .trim();
-          if (stripped) {
-            queries.push(stripped);
-          }
-        }
-      }
-      return queries;
-    })
-    .map((value) => truncate(value, 60))
-    .filter((value) => value.split(/\s+/).length <= 6);
-  const normalizedSeen = new Set<string>();
-  const searchQueries: string[] = [];
+  const searchQueries = buildCustomerSearchQueries(companyProfile);
+  const idealCustomerSummary = searchQueries.length
+    ? `Best-fit buyers look like ${searchQueries
+        .slice(0, 3)
+        .join(", ")} businesses rather than other trade-service providers.`
+    : companyProfile.description ||
+      `${companyProfile.name} is targeting businesses that align with its services.`;
 
-  for (const query of queryCandidates) {
-    const normalized = normalizeText(query);
-    if (!normalized || normalizedSeen.has(normalized)) {
+  return {
+    search_queries:
+      searchQueries.length > 0 ? searchQueries : ["manufacturing facility"],
+    ideal_customer_summary: idealCustomerSummary,
+    target_signals:
+      searchQueries.length > 0
+        ? searchQueries.slice(0, 4)
+        : companyProfile.services.slice(0, 4),
+    exclusion_signals: ["service contractors", "trade schools", "training providers"],
+  };
+}
+
+function mergeSearchQueries(
+  primary: string[],
+  secondary: string[],
+  companyProfile?: DiscoveryCompanyProfile
+): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const query of [...primary, ...secondary]) {
+    const normalizedQuery = normalizeQueryCandidate(query);
+    const wordCount = normalizedQuery.split(/\s+/).filter(Boolean).length;
+
+    if (!normalizedQuery || wordCount > 6) {
       continue;
     }
-    normalizedSeen.add(normalized);
-    searchQueries.push(query);
-    if (searchQueries.length >= 4) {
+
+    if (
+      companyProfile &&
+      isSupplierCentricQuery(normalizedQuery, companyProfile)
+    ) {
+      continue;
+    }
+
+    const normalized = normalizeText(normalizedQuery);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    merged.push(normalizedQuery);
+
+    if (merged.length >= 5) {
       break;
     }
   }
 
-  if (searchQueries.length === 0) {
-    const querySource =
-      companyProfile.services[0] ||
-      companyProfile.industry ||
-      companyProfile.description ||
-      companyProfile.name;
-    const fallbackQuery = truncate(querySource.replace(/\s+/g, " "), 60);
-    if (fallbackQuery) {
-      searchQueries.push(fallbackQuery);
-    }
-  }
-
-  return {
-    search_queries: searchQueries.length > 0 ? searchQueries : ["local businesses"],
-    ideal_customer_summary:
-      companyProfile.description ||
-      `${companyProfile.name} is targeting businesses that align with its services.`,
-    target_signals: companyProfile.services.slice(0, 4),
-    exclusion_signals: [],
-  };
+  return merged;
 }
 
-function sanitizeSearchQueries(queries: string[]): string[] {
-  const seen = new Set<string>();
+function sanitizeSearchQueries(
+  queries: string[],
+  companyProfile?: DiscoveryCompanyProfile
+): string[] {
+  return mergeSearchQueries(queries, [], companyProfile).filter((query) => {
+    const normalized = normalizeText(query);
+    if (!normalized) {
+      return false;
+    }
 
-  return queries
-    .map((query) => truncate(query.replace(/\s+/g, " ").trim(), 60))
-    .filter((query) => {
-      const normalized = normalizeText(query);
-      if (!normalized || seen.has(normalized)) {
-        return false;
-      }
-      seen.add(normalized);
-      return true;
-    })
-    .slice(0, 5);
+    if (
+      companyProfile &&
+      isSupplierCentricQuery(query, companyProfile)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function formatSearchJobQuery(searchQueries: string[]): string {
@@ -1336,15 +1551,32 @@ export async function POST(request: NextRequest) {
         temperature: 0.2,
         maxTokens: 700,
       });
-      const plannedQueries = sanitizeSearchQueries(parsed.search_queries);
+      const plannedQueries = sanitizeSearchQueries(
+        parsed.search_queries,
+        companyProfile
+      );
+      const mergedQueries = mergeSearchQueries(
+        plannedQueries,
+        searchPlan.search_queries,
+        companyProfile
+      );
+      const plannedTargetSignals = parsed.target_signals.filter(Boolean);
+      const plannedExclusionSignals = parsed.exclusion_signals.filter(Boolean);
       searchPlan = {
         search_queries:
-          plannedQueries.length > 0 ? plannedQueries : searchPlan.search_queries,
+          mergedQueries.length > 0 ? mergedQueries : searchPlan.search_queries,
         ideal_customer_summary:
-          parsed.ideal_customer_summary.trim() ||
-          searchPlan.ideal_customer_summary,
-        target_signals: parsed.target_signals.filter(Boolean),
-        exclusion_signals: parsed.exclusion_signals.filter(Boolean),
+          plannedQueries.length > 0 && parsed.ideal_customer_summary.trim()
+            ? parsed.ideal_customer_summary.trim()
+            : searchPlan.ideal_customer_summary,
+        target_signals:
+          plannedQueries.length > 0 && plannedTargetSignals.length > 0
+            ? plannedTargetSignals
+            : searchPlan.target_signals,
+        exclusion_signals:
+          plannedQueries.length > 0 && plannedExclusionSignals.length > 0
+            ? plannedExclusionSignals
+            : searchPlan.exclusion_signals,
       };
       runTracker.success("Search plan generated", {
         stage: "plan",
@@ -1359,9 +1591,9 @@ export async function POST(request: NextRequest) {
 
     const manualQuery =
       typeof body.query === "string" ? body.query.trim() : "";
-    const searchQueries = sanitizeSearchQueries(
-      manualQuery ? [manualQuery] : searchPlan.search_queries
-    );
+    const searchQueries = manualQuery
+      ? sanitizeSearchQueries([manualQuery])
+      : sanitizeSearchQueries(searchPlan.search_queries, companyProfile);
     const searchQuery = searchQueries[0] || "local businesses";
     runTracker.setSummary("Resolving search geography");
     runTracker.progress("Geocoding target town", {

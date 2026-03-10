@@ -63,11 +63,16 @@ Respond ONLY with a valid JSON object matching this exact schema:
 Rules:
 - Return 2-5 distinct search_queries when possible; avoid near-duplicates
 - Each search query must be short and concrete, usually 2-6 words
+- Every search query must name a customer business, facility, operator, or industry segment that could appear on Google Maps
 - Prefer the business type the supplier most likely sells into, not the supplier's own service label
 - Cover different realistic buyer angles such as facility type, buyer industry, or operation style when the profile supports them
 - Optimize for filtering quality in Google Maps, not marketing language
 - Avoid town names in the query because location is handled separately
 - Avoid obvious competitor categories unless they are also realistic buyers
+- Never return the supplier's own services, trades, certifications, job titles, or capability labels
+- If a query could plausibly be the supplier's own services page title, it is wrong
+- Bad query examples: "industrial mechanical services", "mechanical services", "millwrighting", "plant maintenance"
+- Good query examples: "manufacturing facility", "industrial plant", "food processing plant", "steel fabricator"
 - Keep target and exclusion signals concise and factual
 - Do not include any text outside the JSON object`;
 
