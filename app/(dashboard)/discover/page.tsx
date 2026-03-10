@@ -16,7 +16,6 @@ import {
   Target,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { LiveRunMonitor } from "@/components/agent/LiveRunMonitor";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -119,6 +118,7 @@ interface DiscoveryResult {
   radiusKm: number;
   maxResults: number;
   searchQuery: string;
+  searchQueries: string[];
   idealCustomerSummary: string;
   targetSignals: string[];
   exclusionSignals: string[];
@@ -542,16 +542,6 @@ export default function DiscoverPage() {
         </div>
       </section>
 
-      <LiveRunMonitor
-        title="Discovery Activity"
-        description="This panel updates while discovery is planning, geocoding, searching Google business data, and shortlisting prospects."
-        kind="discovery"
-        limit={6}
-        eventLimit={6}
-        linkHref="/runs"
-        emptyMessage="Launch discovery to see the live step stream here."
-      />
-
       {loading ? (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -625,6 +615,16 @@ export default function DiscoverPage() {
                 <div className="grid gap-5 md:grid-cols-2">
                   <div className="space-y-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Search coverage
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {result.searchQueries.map((query) => (
+                        <Badge key={query} variant="secondary">
+                          {query}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="pt-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       Ideal customer
                     </p>
                     <p className="text-sm leading-6 text-muted-foreground">

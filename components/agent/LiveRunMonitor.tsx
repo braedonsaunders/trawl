@@ -120,7 +120,7 @@ function eventIcon(event: RunEvent) {
 }
 
 export function LiveRunMonitor({
-  title = "Live Runs",
+  title = "Activity",
   description = "Watch discovery, enrichment, scoring, and crawl steps as they happen.",
   className,
   kind,
@@ -169,7 +169,7 @@ export function LiveRunMonitor({
         });
 
         if (!response.ok) {
-          throw new Error("Failed to load live runs");
+            throw new Error("Failed to load activity");
         }
 
         const payload = (await response.json()) as LiveRunMonitorResponse;
@@ -189,7 +189,7 @@ export function LiveRunMonitor({
         const message =
           fetchError instanceof Error
             ? fetchError.message
-            : "Failed to load live runs";
+            : "Failed to load activity";
         startTransition(() => {
           setError(message);
         });

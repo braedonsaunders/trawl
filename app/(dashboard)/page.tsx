@@ -28,8 +28,6 @@ interface DashboardData {
     enriched: number;
     scored: number;
     contacted: number;
-    replied: number;
-    handed_off: number;
   };
   recentActivity: {
     lead_name: string;
@@ -146,7 +144,7 @@ export default function DashboardPage() {
       {/* Pipeline Funnel */}
       <div className="rounded-xl border bg-card p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold">Pipeline Funnel</h2>
-        <PipelineFunnel counts={data?.pipeline ?? { discovered: 0, enriched: 0, scored: 0, contacted: 0, replied: 0, handed_off: 0 }} />
+        <PipelineFunnel counts={data?.pipeline ?? { discovered: 0, enriched: 0, scored: 0, contacted: 0 }} />
       </div>
 
       {/* Quick Actions */}

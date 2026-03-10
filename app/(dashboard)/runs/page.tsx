@@ -7,10 +7,10 @@ export default function RunsPage() {
         <div className="grid gap-4 px-6 py-7 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
           <div className="space-y-3">
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              Operator View
+              Activity Feed
             </p>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-              Watch the agent work live.
+              Watch the system work live.
             </h1>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
               Trawl now records discovery plans, Playwright crawls, firmographic
@@ -33,7 +33,7 @@ export default function RunsPage() {
       </section>
 
       <LiveRunMonitor
-        title="All Agent Runs"
+        title="Activity"
         description="Runs refresh automatically. Active work polls faster, recent completed runs stay visible for review."
         limit={16}
         eventLimit={8}

@@ -1,5 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
-import { type Lead, upsertLead } from "@/lib/db/queries/leads";
+import { after, NextRequest, NextResponse } from "next/server";
+import {
+  getLeadByGooglePlaceId,
+  type Lead,
+  upsertLead,
+} from "@/lib/db/queries/leads";
+import { queueLeadAnalysis } from "@/lib/leads/auto-analysis";
 
 interface DiscoveryLeadCandidate {
   googlePlaceId: string;
@@ -56,6 +61,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const existingLead = getLeadByGooglePlaceId(candidate.googlePlaceId);
     const savedLead = upsertLead({
       google_place_id: candidate.googlePlaceId,
       name: candidate.name,
@@ -72,6 +78,12 @@ export async function POST(request: NextRequest) {
           : null,
       categories: JSON.stringify(Array.isArray(candidate.categories) ? candidate.categories : []),
     });
+
+    if (!existingLead) {
+      after(() => {
+        queueLeadAnalysis([savedLead.id], "discover_dedupe");
+      });
+    }
 
     return NextResponse.json({
       ok: true,

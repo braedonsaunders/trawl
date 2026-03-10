@@ -6,8 +6,6 @@ import {
   Sparkles,
   BarChart3,
   Mail,
-  MessageSquare,
-  UserCheck,
   ChevronRight,
 } from "lucide-react";
 
@@ -17,8 +15,6 @@ interface PipelineFunnelProps {
     enriched: number;
     scored: number;
     contacted: number;
-    replied: number;
-    handed_off: number;
   };
 }
 
@@ -50,20 +46,6 @@ const stages = [
     icon: Mail,
     color: "bg-green-500/10 text-green-700 border-green-500/20 dark:text-green-400",
     barColor: "bg-green-500",
-  },
-  {
-    key: "replied" as const,
-    label: "Replied",
-    icon: MessageSquare,
-    color: "bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-400",
-    barColor: "bg-amber-500",
-  },
-  {
-    key: "handed_off" as const,
-    label: "Handed Off",
-    icon: UserCheck,
-    color: "bg-orange-500/10 text-orange-700 border-orange-500/20 dark:text-orange-400",
-    barColor: "bg-orange-500",
   },
 ];
 

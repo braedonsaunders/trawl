@@ -4,7 +4,13 @@ import { getEmailDraftCount, getOpenedToday } from "@/lib/db/queries/emails";
 
 export async function GET() {
   try {
-    const pipeline = getLeadCounts();
+    const rawPipeline = getLeadCounts();
+    const pipeline = {
+      discovered: rawPipeline["discovered"] || 0,
+      enriched: rawPipeline["enriched"] || 0,
+      scored: rawPipeline["scored"] || 0,
+      contacted: rawPipeline["contacted"] || 0,
+    };
     const draftCount = getEmailDraftCount();
     const openedToday = getOpenedToday();
 
@@ -26,7 +32,7 @@ export async function GET() {
       hotLeads,
       draftCount,
       openedToday,
-      contacted: pipeline["contacted"] || 0,
+      contacted: pipeline.contacted,
       pipeline,
       recentActivity,
     });

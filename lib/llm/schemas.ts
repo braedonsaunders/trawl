@@ -55,7 +55,7 @@ export const companyProfileResultSchema = z.object({
 });
 
 export const discoverySearchPlanSchema = z.object({
-  search_query: z.string(),
+  search_queries: z.array(z.string()).min(1).max(5),
   ideal_customer_summary: z.string(),
   target_signals: z.array(z.string()),
   exclusion_signals: z.array(z.string()),

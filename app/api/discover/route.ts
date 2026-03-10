@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { startAgentRun, type AgentRunTracker } from "@/lib/agent/monitor";
 import { getCompanyProfile } from "@/lib/db/queries/companies";
 import {
   getAllLeads,
+  getLeadByGooglePlaceId,
   type Lead,
   upsertLead,
 } from "@/lib/db/queries/leads";
@@ -18,6 +19,7 @@ import {
   type PlaceLead,
 } from "@/lib/google-maps/places";
 import { callLLM } from "@/lib/llm/client";
+import { queueLeadAnalysis } from "@/lib/leads/auto-analysis";
 import {
   buildDiscoveryDeduplicationPrompt,
   buildDiscoverySearchPlanPrompt,
@@ -32,7 +34,7 @@ import {
 } from "@/lib/llm/schemas";
 
 interface SearchPlan {
-  search_query: string;
+  search_queries: string[];
   ideal_customer_summary: string;
   target_signals: string[];
   exclusion_signals: string[];
@@ -469,19 +471,27 @@ function buildLeadPreview(input: {
   };
 }
 
-function persistDiscoveryLead(preview: DiscoveryLeadPreview): Lead {
-  return upsertLead({
-    google_place_id: preview.googlePlaceId,
-    name: preview.name,
-    address: preview.address,
-    city: preview.city,
-    province: preview.province,
-    phone: preview.phone,
-    website: preview.website,
-    google_rating: preview.googleRating,
-    google_review_count: preview.googleReviewCount,
-    categories: JSON.stringify(preview.categories),
-  });
+function persistDiscoveryLead(preview: DiscoveryLeadPreview): {
+  lead: Lead;
+  isNew: boolean;
+} {
+  const existingLead = getLeadByGooglePlaceId(preview.googlePlaceId);
+
+  return {
+    lead: upsertLead({
+      google_place_id: preview.googlePlaceId,
+      name: preview.name,
+      address: preview.address,
+      city: preview.city,
+      province: preview.province,
+      phone: preview.phone,
+      website: preview.website,
+      google_rating: preview.googleRating,
+      google_review_count: preview.googleReviewCount,
+      categories: JSON.stringify(preview.categories),
+    }),
+    isNew: !existingLead,
+  };
 }
 
 function buildSurfacedLeadResult(
@@ -760,21 +770,106 @@ function distanceKm(
 function buildFallbackSearchPlan(
   companyProfile: DiscoveryCompanyProfile
 ): SearchPlan {
-  const querySource =
-    companyProfile.services[0] ||
-    companyProfile.industry ||
-    companyProfile.description ||
-    companyProfile.name;
-  const searchQuery = truncate(querySource.replace(/\s+/g, " "), 60);
+  const rawCandidates = [
+    ...companyProfile.services,
+    companyProfile.industry,
+    ...companyProfile.differentiators,
+    ...companyProfile.description
+      .split(/[.;]|\band\b/)
+      .map((entry) => entry.trim()),
+    companyProfile.name,
+  ];
+  const stopPhrases = [
+    "solutions",
+    "service",
+    "services",
+    "provider",
+    "manufacturing",
+    "manufacturer",
+    "industrial",
+    "company",
+    "business",
+  ];
+  const queryCandidates = rawCandidates
+    .map((value) => value.replace(/[()]/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .flatMap((value) => {
+      const normalized = value.toLowerCase();
+      const queries = [value];
+      for (const phrase of stopPhrases) {
+        if (normalized.includes(phrase)) {
+          const stripped = value
+            .replace(new RegExp(`\\b${phrase}\\b`, "ig"), " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (stripped) {
+            queries.push(stripped);
+          }
+        }
+      }
+      return queries;
+    })
+    .map((value) => truncate(value, 60))
+    .filter((value) => value.split(/\s+/).length <= 6);
+  const normalizedSeen = new Set<string>();
+  const searchQueries: string[] = [];
+
+  for (const query of queryCandidates) {
+    const normalized = normalizeText(query);
+    if (!normalized || normalizedSeen.has(normalized)) {
+      continue;
+    }
+    normalizedSeen.add(normalized);
+    searchQueries.push(query);
+    if (searchQueries.length >= 4) {
+      break;
+    }
+  }
+
+  if (searchQueries.length === 0) {
+    const querySource =
+      companyProfile.services[0] ||
+      companyProfile.industry ||
+      companyProfile.description ||
+      companyProfile.name;
+    const fallbackQuery = truncate(querySource.replace(/\s+/g, " "), 60);
+    if (fallbackQuery) {
+      searchQueries.push(fallbackQuery);
+    }
+  }
 
   return {
-    search_query: searchQuery || "local businesses",
+    search_queries: searchQueries.length > 0 ? searchQueries : ["local businesses"],
     ideal_customer_summary:
       companyProfile.description ||
       `${companyProfile.name} is targeting businesses that align with its services.`,
     target_signals: companyProfile.services.slice(0, 4),
     exclusion_signals: [],
   };
+}
+
+function sanitizeSearchQueries(queries: string[]): string[] {
+  const seen = new Set<string>();
+
+  return queries
+    .map((query) => truncate(query.replace(/\s+/g, " ").trim(), 60))
+    .filter((query) => {
+      const normalized = normalizeText(query);
+      if (!normalized || seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    })
+    .slice(0, 5);
+}
+
+function formatSearchJobQuery(searchQueries: string[]): string {
+  if (searchQueries.length <= 1) {
+    return searchQueries[0] || "local businesses";
+  }
+
+  return `${searchQueries[0]} +${searchQueries.length - 1} more`;
 }
 
 function heuristicProspectScore(candidate: DiscoveryCandidate): number {
@@ -941,6 +1036,93 @@ interface AgentShortlistResult {
   errors: string[];
 }
 
+interface ShortlistBatchResult {
+  prospects: ShortlistedProspect[];
+  model: string | null;
+  reviewedCandidates: number;
+  batchCount: number;
+  errors: string[];
+}
+
+async function shortlistBatchWithAgent(input: {
+  companyProfile: DiscoveryCompanyProfile;
+  town: string;
+  radiusKm: number;
+  searchQuery: string;
+  candidates: DiscoveryCandidate[];
+}): Promise<ShortlistBatchResult> {
+  const { candidates } = input;
+
+  if (candidates.length === 0) {
+    return {
+      prospects: [],
+      model: null,
+      reviewedCandidates: 0,
+      batchCount: 0,
+      errors: [],
+    };
+  }
+
+  try {
+    const prompt = buildDiscoveryShortlistPrompt({
+      companyProfile: input.companyProfile,
+      town: input.town,
+      radiusKm: input.radiusKm,
+      maxResults: candidates.length,
+      searchQuery: input.searchQuery,
+      candidates,
+      coverage: "all",
+    });
+    const { parsed, model } = await callLLM({
+      ...prompt,
+      schema: discoveryShortlistResultSchema,
+      temperature: 0.2,
+      maxTokens: estimateShortlistMaxTokens(candidates.length),
+    });
+
+    return {
+      prospects: normalizeShortlistBatch(candidates, parsed.prospects),
+      model,
+      reviewedCandidates: candidates.length,
+      batchCount: 1,
+      errors: [],
+    };
+  } catch (error) {
+    const message = toErrorMessage(error);
+
+    if (candidates.length > 1) {
+      const midpoint = Math.ceil(candidates.length / 2);
+      const [leftResult, rightResult] = await Promise.all([
+        shortlistBatchWithAgent({
+          ...input,
+          candidates: candidates.slice(0, midpoint),
+        }),
+        shortlistBatchWithAgent({
+          ...input,
+          candidates: candidates.slice(midpoint),
+        }),
+      ]);
+
+      return {
+        prospects: [...leftResult.prospects, ...rightResult.prospects],
+        model: leftResult.model ?? rightResult.model,
+        reviewedCandidates:
+          leftResult.reviewedCandidates + rightResult.reviewedCandidates,
+        batchCount: 1 + leftResult.batchCount + rightResult.batchCount,
+        errors: [message, ...leftResult.errors, ...rightResult.errors],
+      };
+    }
+
+    return {
+      prospects: buildFallbackShortlist(candidates, candidates.length),
+      model: null,
+      reviewedCandidates: 0,
+      batchCount: 1,
+      errors: [message],
+    };
+  }
+}
+
 async function shortlistCandidatesWithAgent(input: {
   companyProfile: DiscoveryCompanyProfile;
   town: string;
@@ -972,37 +1154,24 @@ async function shortlistCandidatesWithAgent(input: {
   const errors: string[] = [];
   let model: string | null = null;
   let reviewedCandidates = 0;
+  let batchCount = 0;
 
   for (const batch of batches) {
-    try {
-      const prompt = buildDiscoveryShortlistPrompt({
-        companyProfile: input.companyProfile,
-        town: input.town,
-        radiusKm: input.radiusKm,
-        maxResults: batch.length,
-        searchQuery: input.searchQuery,
-        candidates: batch,
-        coverage: "all",
-      });
-      const { parsed, model: resolvedModel } = await callLLM({
-        ...prompt,
-        schema: discoveryShortlistResultSchema,
-        temperature: 0.2,
-        maxTokens: estimateShortlistMaxTokens(batch.length),
-      });
+    const batchResult = await shortlistBatchWithAgent({
+      companyProfile: input.companyProfile,
+      town: input.town,
+      radiusKm: input.radiusKm,
+      searchQuery: input.searchQuery,
+      candidates: batch,
+    });
 
-      model = model ?? resolvedModel;
-      reviewedCandidates += batch.length;
+    model = model ?? batchResult.model;
+    reviewedCandidates += batchResult.reviewedCandidates;
+    batchCount += batchResult.batchCount;
+    errors.push(...batchResult.errors);
 
-      for (const prospect of normalizeShortlistBatch(batch, parsed.prospects)) {
-        scoredById.set(prospect.google_place_id, prospect);
-      }
-    } catch (error) {
-      errors.push(toErrorMessage(error));
-
-      for (const prospect of buildFallbackShortlist(batch, batch.length)) {
-        scoredById.set(prospect.google_place_id, prospect);
-      }
+    for (const prospect of batchResult.prospects) {
+      scoredById.set(prospect.google_place_id, prospect);
     }
   }
 
@@ -1031,7 +1200,7 @@ async function shortlistCandidatesWithAgent(input: {
     model,
     reviewedCandidates,
     reviewTargetCount,
-    batchCount: batches.length,
+    batchCount,
     errors,
   };
 }
@@ -1167,9 +1336,10 @@ export async function POST(request: NextRequest) {
         temperature: 0.2,
         maxTokens: 700,
       });
+      const plannedQueries = sanitizeSearchQueries(parsed.search_queries);
       searchPlan = {
-        search_query:
-          parsed.search_query.trim() || searchPlan.search_query,
+        search_queries:
+          plannedQueries.length > 0 ? plannedQueries : searchPlan.search_queries,
         ideal_customer_summary:
           parsed.ideal_customer_summary.trim() ||
           searchPlan.ideal_customer_summary,
@@ -1189,7 +1359,10 @@ export async function POST(request: NextRequest) {
 
     const manualQuery =
       typeof body.query === "string" ? body.query.trim() : "";
-    const searchQuery = manualQuery || searchPlan.search_query;
+    const searchQueries = sanitizeSearchQueries(
+      manualQuery ? [manualQuery] : searchPlan.search_queries
+    );
+    const searchQuery = searchQueries[0] || "local businesses";
     runTracker.setSummary("Resolving search geography");
     runTracker.progress("Geocoding target town", {
       stage: "search",
@@ -1198,7 +1371,7 @@ export async function POST(request: NextRequest) {
     const geocodedTown = await geocodePlace(town);
 
     const job = createSearchJob({
-      query: searchQuery,
+      query: formatSearchJobQuery(searchQueries),
       location: geocodedTown.formattedAddress,
       radius_km: radiusKm,
     });
@@ -1211,7 +1384,7 @@ export async function POST(request: NextRequest) {
         resolvedTown: geocodedTown.formattedAddress,
         radiusKm,
         maxResults,
-        searchQuery,
+        searchQueries,
       },
     });
     runTracker.success("Search job created", {
@@ -1224,16 +1397,35 @@ export async function POST(request: NextRequest) {
       started_at: new Date().toISOString(),
     });
 
-    runTracker.progress("Searching Google business data", {
-      stage: "search",
-      detail: searchQuery,
-    });
-    const places = await searchPlaces({
-      query: searchQuery,
-      location: geocodedTown.location,
-      radiusKm,
-      maxResults,
-    });
+    const perQueryMaxResults = manualQuery
+      ? maxResults
+      : Math.min(35, Math.max(maxResults, Math.ceil(maxResults * 1.25)));
+    const placesById = new Map<string, PlaceLead>();
+
+    for (const [index, query] of searchQueries.entries()) {
+      runTracker.progress("Searching Google business data", {
+        stage: "search",
+        detail:
+          searchQueries.length > 1
+            ? `Query ${index + 1}/${searchQueries.length}: ${query}`
+            : query,
+      });
+
+      const queryPlaces = await searchPlaces({
+        query,
+        location: geocodedTown.location,
+        radiusKm,
+        maxResults: perQueryMaxResults,
+      });
+
+      for (const place of queryPlaces) {
+        if (!placesById.has(place.google_place_id)) {
+          placesById.set(place.google_place_id, place);
+        }
+      }
+    }
+
+    const places = Array.from(placesById.values());
 
     if (places.length === 0) {
       updateSearchJob(jobId, {
@@ -1251,6 +1443,7 @@ export async function POST(request: NextRequest) {
         radiusKm,
         maxResults,
         searchQuery,
+        searchQueries,
         idealCustomerSummary: searchPlan.ideal_customer_summary,
         targetSignals: searchPlan.target_signals,
         exclusionSignals: searchPlan.exclusion_signals,
@@ -1271,7 +1464,10 @@ export async function POST(request: NextRequest) {
 
     runTracker.success("Initial matches collected", {
       stage: "search",
-      detail: `${places.length} businesses returned`,
+      detail:
+        searchQueries.length > 1
+          ? `${places.length} unique businesses across ${searchQueries.length} queries`
+          : `${places.length} businesses returned`,
     });
     runTracker.setSummary("Hydrating place details");
     runTracker.progress("Fetching richer Google place details", {
@@ -1570,6 +1766,7 @@ export async function POST(request: NextRequest) {
     }
 
     let newLeads = 0;
+    const newLeadIds: number[] = [];
     let existingLeads = 0;
     let autoMerged = 0;
     const duplicateReviews: DuplicateReviewSuggestion[] = [];
@@ -1725,8 +1922,13 @@ export async function POST(request: NextRequest) {
       }
 
       const primary = groupPreviews[0];
-      const savedLead = persistDiscoveryLead(primary);
-      newLeads += 1;
+      const { lead: savedLead, isNew } = persistDiscoveryLead(primary);
+      if (isNew) {
+        newLeads += 1;
+      }
+      if (isNew) {
+        newLeadIds.push(savedLead.id);
+      }
       surfacedLeads.push(
         buildSurfacedLeadResult(primary, {
           id: savedLead.id,
@@ -1808,6 +2010,10 @@ export async function POST(request: NextRequest) {
       `Discovery complete: ${surfacedLeads.length} surfaced, ${newLeads} new, ${existingLeads} existing, ${duplicateReviews.length} review`
     );
 
+    after(() => {
+      queueLeadAnalysis(newLeadIds, "discover");
+    });
+
     return NextResponse.json({
       runId: runTracker.runId,
       jobId,
@@ -1816,6 +2022,7 @@ export async function POST(request: NextRequest) {
       radiusKm,
       maxResults,
       searchQuery,
+      searchQueries,
       idealCustomerSummary: searchPlan.ideal_customer_summary,
       targetSignals: searchPlan.target_signals,
       exclusionSignals: searchPlan.exclusion_signals,

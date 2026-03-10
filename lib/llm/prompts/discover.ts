@@ -50,19 +50,21 @@ export function buildDiscoverySearchPlanPrompt(
   companyProfile: DiscoveryCompanyProfile,
   town: string
 ): PromptPair {
-  const systemPrompt = `You are a B2B demand generation strategist. Your task is to turn a supplier's company profile into the best Google Maps Places search query for finding likely buyers in a town.
+  const systemPrompt = `You are a B2B demand generation strategist. Your task is to turn a supplier's company profile into a small set of Google Maps Places search queries for finding likely buyers in a town.
 
 Respond ONLY with a valid JSON object matching this exact schema:
 {
-  "search_query": "short Google Maps query",
+  "search_queries": ["short Google Maps query"],
   "ideal_customer_summary": "1-2 sentence description of the best-fit buyer",
   "target_signals": ["signals that make a business a strong prospect"],
   "exclusion_signals": ["signals that make a business a weak prospect or likely competitor"]
 }
 
 Rules:
-- "search_query" must be short and concrete, usually 2-6 words
+- Return 2-5 distinct search_queries when possible; avoid near-duplicates
+- Each search query must be short and concrete, usually 2-6 words
 - Prefer the business type the supplier most likely sells into, not the supplier's own service label
+- Cover different realistic buyer angles such as facility type, buyer industry, or operation style when the profile supports them
 - Optimize for filtering quality in Google Maps, not marketing language
 - Avoid town names in the query because location is handled separately
 - Avoid obvious competitor categories unless they are also realistic buyers
