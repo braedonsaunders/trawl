@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../trawl-social.png" alt="Trawl" width="340" />
+  <img src="trawl-social.png" alt="Trawl" width="340" />
 </p>
 
 <p align="center">
