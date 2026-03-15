@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/trawl-readme-hero.svg" alt="Trawl desktop app hero" width="100%" />
+  <img src="../trawl-social.png" alt="Trawl" width="340" />
 </p>
 
 <p align="center">
